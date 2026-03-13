@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Professional Pomodoro Timer with custom durations, task management, and offline support.">
+    <meta name="description" content="Professional Pomodoro Timer with custom durations, task management, dark mode, and offline support.">
     <meta name="theme-color" content="#e74c3c">
     <title>Pomodoro Timer Pro</title>
     
@@ -15,7 +15,10 @@
 </head>
 <body class="work-mode">
     <main id="app" role="main">
-        <!-- Timer Display -->
+        <!-- Phase 3: Dark Mode Toggle -->
+        <button id="theme-toggle" type="button" aria-label="Toggle Dark Mode">🌙</button>
+
+        <!-- Phase 1: State & Timer Display -->
         <section id="state-indicator" aria-live="polite" aria-atomic="true">
             <h2 id="current-phase">Work Session</h2>
         </section>
@@ -24,14 +27,14 @@
             <time id="time-left" aria-live="assertive" aria-atomic="true">25:00</time>
         </section>
 
-        <!-- Core Controls -->
+        <!-- Phase 1: Core Controls -->
         <section id="controls">
             <button id="start-btn" type="button" aria-label="Start Timer">Start</button>
             <button id="pause-btn" type="button" aria-label="Pause Timer" hidden>Pause</button>
             <button id="reset-btn" type="button" aria-label="Reset Timer">Reset</button>
         </section>
 
-        <!-- Settings (Phase 2) -->
+        <!-- Phase 2: Dynamic Settings -->
         <details id="settings">
             <summary>Timer Settings</summary>
             <div class="settings-grid">
@@ -46,7 +49,7 @@
             </div>
         </details>
 
-        <!-- Task Management (Phase 2) -->
+        <!-- Phase 2: Task Management -->
         <section id="task-management">
             <h3>Tasks</h3>
             <form id="task-form">
@@ -58,7 +61,7 @@
             </ul>
         </section>
 
-        <!-- Session Tracking -->
+        <!-- Data Management -->
         <section id="session-tracking">
             <p>Completed Sessions: <span id="session-count">0</span></p>
             <button id="clear-progress-btn" type="button" title="Clear all sessions and tasks">
@@ -67,13 +70,13 @@
         </section>
     </main>
 
-    <!-- Service Worker Registration -->
+    <!-- PWA Service Worker Registration -->
     <script>
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
                 navigator.serviceWorker.register('./sw.js')
-                    .then(() => console.log("PWA: Service Worker Active"))
-                    .catch(err => console.warn("PWA: Registration Failed", err));
+                    .then(() => console.log('PWA: Service Worker Active'))
+                    .catch(err => console.warn('PWA: Registration Failed', err));
             });
         }
     </script>
