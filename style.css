@@ -1,0 +1,86 @@
+:root {
+    --bg-color: #f0f2f5;
+    --text-color: #1a1a1a;
+    --primary-color: #e74c3c; /* Work Red */
+    --transition-speed: 0.4s;
+}
+
+body.work-mode {
+    --primary-color: #e74c3c;
+    background-color: #fdf2f2;
+}
+
+body.break-mode {
+    --primary-color: #2ecc71; /* Break Green */
+    background-color: #f2fdf5;
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: system-ui, -apple-system, sans-serif;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    color: var(--text-color);
+    transition: background-color var(--transition-speed) ease;
+}
+
+#app {
+    text-align: center;
+    background: white;
+    padding: 2rem;
+    border-radius: 2rem;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+    width: 90%;
+    max-width: 400px;
+}
+
+#timer-display {
+    font-size: 5rem;
+    font-weight: 800;
+    margin: 1.5rem 0;
+    font-variant-numeric: tabular-nums;
+    color: var(--primary-color);
+}
+
+#current-phase {
+    text-transform: uppercase;
+    letter-spacing: 0.1rem;
+    font-size: 0.9rem;
+    color: #666;
+}
+
+#controls {
+    display: flex;
+    gap: 1rem;
+    justify-content: center;
+    margin-bottom: 1.5rem;
+}
+
+button {
+    padding: 0.8rem 1.5rem;
+    border: none;
+    border-radius: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: transform 0.1s, opacity 0.2s;
+}
+
+button:active { transform: scale(0.95); }
+
+#start-btn { background: var(--primary-color); color: white; }
+#pause-btn { background: #95a5a6; color: white; }
+#reset-btn { background: transparent; color: #7f8c8d; border: 1px solid #bdc3c7; }
+
+#session-tracking {
+    border-top: 1px solid #eee;
+    padding-top: 1rem;
+    font-size: 0.85rem;
+    color: #999;
+}
