@@ -1,67 +1,59 @@
 /**
- * Pomodoro Timer MVP - app.js
- * Tech Stack: Modern Vanilla JS, Zustand (Vanilla), Web Audio API
+ * Pomodoro Timer Pro - app.js (Phase 2)
+ * Features: Dynamic Durations, Task Management, Persistence, Alerts
  */
 
 import { createStore } from 'https://esm.sh/zustand@4.5.2/vanilla';
 import { persist, createJSONStorage } from 'https://esm.sh/zustand@4.5.2/middleware';
 
-// --- 1. UTILITIES: ALERTS & NOTIFICATIONS ---
+// --- 1. UTILITIES: ALERTS & FORMATTING ---
 
 const playNotificationSound = () => {
     try {
         const ctx = new (window.AudioContext || window.webkitAudioContext)();
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
-
         osc.type = 'sine';
         osc.frequency.setValueAtTime(880, ctx.currentTime); 
         osc.frequency.exponentialRampToValueAtTime(440, ctx.currentTime + 0.5); 
-
         gain.gain.setValueAtTime(0.1, ctx.currentTime);
         gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.5);
-
         osc.connect(gain);
         gain.connect(ctx.destination);
-
         osc.start();
         osc.stop(ctx.currentTime + 0.5);
-    } catch (e) {
-        console.warn("Audio context failed to initialize:", e);
-    }
+    } catch (e) { console.warn("Audio blocked:", e); }
 };
 
 const triggerVisualNotification = (title, body) => {
     if (Notification.permission === 'granted') {
-        new Notification(title, { 
-            body, 
-            icon: 'https://cdn-icons-png.flaticon.com/512/2553/2553391.png' 
-        });
+        new Notification(title, { body, icon: 'https://cdn-icons-png.flaticon.com/512/2553/2553391.png' });
     }
+};
+
+const formatTime = (seconds) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
 };
 
 // --- 2. STATE ENGINE: ZUSTAND STORE ---
 
-const WORK_TIME = 25 * 60;
-const BREAK_TIME = 5 * 60;
-
 const timerStore = createStore(
     persist(
         (set, get) => ({
-            timeLeft: WORK_TIME,
+            timeLeft: 1500,
+            workDuration: 25,
+            breakDuration: 5,
             isActive: false,
-            mode: 'work', // 'work' | 'break'
+            mode: 'work',
             sessionsCompleted: 0,
             intervalId: null,
+            tasks: [],
 
             startTimer: () => {
                 if (get().isActive) return;
-                
-                // Request Notification Permission on first user gesture
-                if (Notification.permission === 'default') {
-                    Notification.requestPermission();
-                }
-
+                if (Notification.permission === 'default') Notification.requestPermission();
                 const id = setInterval(() => get().tick(), 1000);
                 set({ isActive: true, intervalId: id });
             },
@@ -74,55 +66,72 @@ const timerStore = createStore(
 
             resetTimer: () => {
                 get().pauseTimer();
-                const mode = get().mode;
+                const { mode, workDuration, breakDuration } = get();
                 set({ 
-                    timeLeft: mode === 'work' ? WORK_TIME : BREAK_TIME,
+                    timeLeft: mode === 'work' ? workDuration * 60 : breakDuration * 60,
                     isActive: false 
                 });
             },
 
             tick: () => {
-                const { timeLeft, mode, sessionsCompleted } = get();
-
+                const { timeLeft, mode, sessionsCompleted, workDuration, breakDuration } = get();
                 if (timeLeft > 0) {
                     set({ timeLeft: timeLeft - 1 });
                 } else {
-                    // Timer Completion Logic
                     playNotificationSound();
-                    const msg = mode === 'work' ? 'Work session complete! Take a break.' : 'Break over! Back to work.';
-                    triggerVisualNotification('Pomodoro Timer', msg);
-
+                    triggerVisualNotification('Pomodoro', mode === 'work' ? 'Break time!' : 'Work time!');
                     if (mode === 'work') {
-                        set({ 
-                            mode: 'break', 
-                            timeLeft: BREAK_TIME, 
-                            sessionsCompleted: sessionsCompleted + 1 
-                        });
+                        set({ mode: 'break', timeLeft: breakDuration * 60, sessionsCompleted: sessionsCompleted + 1 });
                     } else {
-                        set({ 
-                            mode: 'work', 
-                            timeLeft: WORK_TIME 
-                        });
+                        set({ mode: 'work', timeLeft: workDuration * 60 });
                     }
                     get().pauseTimer();
                 }
             },
 
+            updateSettings: (work, breakTime) => {
+                const w = Math.max(1, Math.min(60, parseInt(work) || 25));
+                const b = Math.max(1, Math.min(30, parseInt(breakTime) || 5));
+                set({ workDuration: w, breakDuration: b });
+                if (!get().isActive) get().resetTimer();
+            },
+
+            addTask: (text) => {
+                const newTask = { id: Date.now(), text: text.trim(), completed: false };
+                if (newTask.text) set((state) => ({ tasks: [...state.tasks, newTask] }));
+            },
+
+            toggleTask: (id) => {
+                set((state) => ({
+                    tasks: state.tasks.map(t => t.id === id ? { ...t, completed: !t.completed } : t)
+                }));
+            },
+
+            deleteTask: (id) => {
+                set((state) => ({ tasks: state.tasks.filter(t => t.id !== id) }));
+            },
+
             clearProgress: () => {
-                if (confirm("Reset all completed session data?")) {
-                    set({ sessionsCompleted: 0 });
+                if (confirm("Reset all session and task data?")) {
+                    set({ sessionsCompleted: 0, tasks: [] });
+                    get().resetTimer();
                 }
             }
         }),
         {
-            name: 'pomodoro-storage',
+            name: 'pomodoro-pro-storage',
             storage: createJSONStorage(() => localStorage),
-            partialize: (state) => ({ sessionsCompleted: state.sessionsCompleted }),
+            partialize: (state) => ({ 
+                sessionsCompleted: state.sessionsCompleted,
+                workDuration: state.workDuration,
+                breakDuration: state.breakDuration,
+                tasks: state.tasks
+            }),
         }
     )
 );
 
-// --- 3. DOM CONTROLLER: UI BINDING ---
+// --- 3. DOM CONTROLLER ---
 
 const elements = {
     timeLeft: document.getElementById('time-left'),
@@ -132,46 +141,82 @@ const elements = {
     pauseBtn: document.getElementById('pause-btn'),
     resetBtn: document.getElementById('reset-btn'),
     clearBtn: document.getElementById('clear-progress-btn'),
+    workInput: document.getElementById('work-input'),
+    breakInput: document.getElementById('break-input'),
+    taskForm: document.getElementById('task-form'),
+    taskInput: document.getElementById('task-input'),
+    taskList: document.getElementById('task-list'),
     body: document.body
 };
 
-const formatTime = (seconds) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+const renderTasks = (tasks) => {
+    elements.taskList.innerHTML = '';
+    tasks.forEach(task => {
+        const li = document.createElement('li');
+        li.className = `task-item ${task.completed ? 'completed' : ''}`;
+        
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.checked = task.completed;
+        checkbox.dataset.id = task.id;
+        checkbox.className = 'task-toggle';
+
+        const span = document.createElement('span');
+        span.textContent = task.text;
+
+        const delBtn = document.createElement('button');
+        delBtn.textContent = '×';
+        delBtn.dataset.id = task.id;
+        delBtn.className = 'task-delete';
+
+        li.append(checkbox, span, delBtn);
+        elements.taskList.appendChild(li);
+    });
 };
 
-// Reactive UI Updates via Subscription
+// Reactive Subscription
+let lastTasks = [];
 timerStore.subscribe((state) => {
-    // Update Text
     elements.timeLeft.textContent = formatTime(state.timeLeft);
     elements.currentPhase.textContent = state.mode === 'work' ? 'Work Session' : 'Break Time';
     elements.sessionCount.textContent = state.sessionsCompleted;
-    
-    // Update Button Visibility
     elements.startBtn.hidden = state.isActive;
     elements.pauseBtn.hidden = !state.isActive;
-
-    // Update Visual State (CSS Classes)
-    if (state.mode === 'work') {
-        elements.body.classList.add('work-mode');
-        elements.body.classList.remove('break-mode');
-    } else {
-        elements.body.classList.add('break-mode');
-        elements.body.classList.remove('work-mode');
-    }
-
-    // Update Browser Tab Title
+    elements.body.className = state.mode === 'work' ? 'work-mode' : 'break-mode';
     document.title = `${formatTime(state.timeLeft)} - ${state.mode === 'work' ? 'Work' : 'Break'}`;
+
+    if (state.tasks !== lastTasks) {
+        renderTasks(state.tasks);
+        lastTasks = state.tasks;
+    }
 });
 
-// Event Listeners
+// Listeners
 elements.startBtn.addEventListener('click', () => timerStore.getState().startTimer());
 elements.pauseBtn.addEventListener('click', () => timerStore.getState().pauseTimer());
 elements.resetBtn.addEventListener('click', () => timerStore.getState().resetTimer());
 elements.clearBtn.addEventListener('click', () => timerStore.getState().clearProgress());
 
-// Initial Render Call
-const initialState = timerStore.getState();
-elements.timeLeft.textContent = formatTime(initialState.timeLeft);
-elements.sessionCount.textContent = initialState.sessionsCompleted;
+const syncSettings = () => timerStore.getState().updateSettings(elements.workInput.value, elements.breakInput.value);
+elements.workInput.addEventListener('change', syncSettings);
+elements.breakInput.addEventListener('change', syncSettings);
+
+elements.taskForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    timerStore.getState().addTask(elements.taskInput.value);
+    elements.taskInput.value = '';
+});
+
+elements.taskList.addEventListener('click', (e) => {
+    const id = parseInt(e.target.dataset.id);
+    if (!id) return;
+    if (e.target.classList.contains('task-toggle')) timerStore.getState().toggleTask(id);
+    if (e.target.classList.contains('task-delete')) timerStore.getState().deleteTask(id);
+});
+
+// Init
+const init = timerStore.getState();
+elements.workInput.value = init.workDuration;
+elements.breakInput.value = init.breakDuration;
+elements.timeLeft.textContent = formatTime(init.timeLeft);
+renderTasks(init.tasks);
