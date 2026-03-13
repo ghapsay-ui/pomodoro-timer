@@ -31,6 +31,7 @@ body.break-mode {
     --primary-color: #2ecc71; /* Break Green */
 }
 
+/* Background Color Logic based on Mode + Theme */
 body.work-mode.dark-mode { background-color: #1a1010; }
 body.break-mode.dark-mode { background-color: #101a12; }
 body.work-mode:not(.dark-mode) { background-color: #fdf2f2; }
@@ -66,7 +67,7 @@ body {
     transition: background var(--transition-speed) ease, box-shadow var(--transition-speed) ease;
 }
 
-/* --- 3. THEME TOGGLE (PHASE 3) --- */
+/* --- 3. THEME TOGGLE --- */
 #theme-toggle {
     position: absolute;
     top: 20px;
@@ -129,7 +130,7 @@ button:active { transform: scale(0.96); }
     border: 2px solid var(--border-color); 
 }
 
-/* --- 6. SETTINGS (PHASE 2) --- */
+/* --- 6. SETTINGS --- */
 #settings {
     margin: 1.5rem 0;
     text-align: left;
@@ -180,7 +181,7 @@ button:active { transform: scale(0.96); }
     color: var(--text-color);
 }
 
-/* --- 7. TASK MANAGEMENT (PHASE 2) --- */
+/* --- 7. TASK MANAGEMENT --- */
 #task-management {
     margin-top: 1.5rem;
     text-align: left;
