@@ -1,14 +1,13 @@
 /**
- * Pomodoro Timer Pro - Definitive Version
- * Features: Local Imports, Custom Durations, Task Management, Persistence
+ * Pomodoro Timer Pro - Final Production Version
+ * Features: Local Imports, Custom Durations, Task Management, Dark Mode, Persistence
  */
 
-// 1. LOCAL IMPORTS (Ensure zustand.js is in your project folder)
+// 1. LOCAL IMPORTS (Requires zustand.js in your project folder)
 import { createStore, persist, createJSONStorage } from './zustand.js';
 
 // 2. ASSET CONFIGURATION
-// Paste your Base64 string here or a local path like './icon.png'
-const NOTIFICATION_ICON = ""; 
+const NOTIFICATION_ICON = ""; // Paste your Base64 string or local path here
 
 // 3. UTILITIES
 const playNotificationSound = () => {
@@ -25,7 +24,7 @@ const playNotificationSound = () => {
         gain.connect(ctx.destination);
         osc.start();
         osc.stop(ctx.currentTime + 0.5);
-    } catch (e) { console.warn("Audio blocked by browser policy."); }
+    } catch (e) { console.warn("Audio blocked by browser."); }
 };
 
 const triggerVisualNotification = (title, body) => {
@@ -44,6 +43,7 @@ const formatTime = (seconds) => {
 const timerStore = createStore(
     persist(
         (set, get) => ({
+            // State
             timeLeft: 1500,
             workDuration: 25,
             breakDuration: 5,
@@ -52,7 +52,9 @@ const timerStore = createStore(
             sessionsCompleted: 0,
             intervalId: null,
             tasks: [],
+            isDarkMode: false,
 
+            // Timer Actions
             startTimer: () => {
                 if (get().isActive) return;
                 if (Notification.permission === 'default') Notification.requestPermission();
@@ -91,6 +93,7 @@ const timerStore = createStore(
                 }
             },
 
+            // Settings & Theme Actions
             updateSettings: (work, breakTime) => {
                 const w = Math.max(1, Math.min(60, parseInt(work) || 25));
                 const b = Math.max(1, Math.min(30, parseInt(breakTime) || 5));
@@ -98,6 +101,9 @@ const timerStore = createStore(
                 if (!get().isActive) get().resetTimer();
             },
 
+            toggleDarkMode: () => set((state) => ({ isDarkMode: !state.isDarkMode })),
+
+            // Task Actions
             addTask: (text) => {
                 const newTask = { id: Date.now(), text: text.trim(), completed: false };
                 if (newTask.text) set((state) => ({ tasks: [...state.tasks, newTask] }));
@@ -114,20 +120,21 @@ const timerStore = createStore(
             },
 
             clearProgress: () => {
-                if (confirm("Reset all session and task data?")) {
-                    set({ sessionsCompleted: 0, tasks: [] });
+                if (confirm("Reset all session, task, and theme data?")) {
+                    set({ sessionsCompleted: 0, tasks: [], isDarkMode: false });
                     get().resetTimer();
                 }
             }
         }),
         {
-            name: 'pomodoro-pro-storage',
+            name: 'pomodoro-ultimate-storage',
             storage: createJSONStorage(() => localStorage),
             partialize: (state) => ({ 
                 sessionsCompleted: state.sessionsCompleted,
                 workDuration: state.workDuration,
                 breakDuration: state.breakDuration,
-                tasks: state.tasks
+                tasks: state.tasks,
+                isDarkMode: state.isDarkMode
             }),
         }
     )
@@ -147,6 +154,7 @@ const elements = {
     taskForm: document.getElementById('task-form'),
     taskInput: document.getElementById('task-input'),
     taskList: document.getElementById('task-list'),
+    themeToggle: document.getElementById('theme-toggle'),
     body: document.body
 };
 
@@ -178,14 +186,25 @@ const renderTasks = (tasks) => {
 // Reactive Subscription
 let lastTasks = [];
 timerStore.subscribe((state) => {
+    // UI Text
     elements.timeLeft.textContent = formatTime(state.timeLeft);
     elements.currentPhase.textContent = state.mode === 'work' ? 'Work Session' : 'Break Time';
     elements.sessionCount.textContent = state.sessionsCompleted;
+    
+    // Buttons & Icons
     elements.startBtn.hidden = state.isActive;
     elements.pauseBtn.hidden = !state.isActive;
-    elements.body.className = state.mode === 'work' ? 'work-mode' : 'break-mode';
+    elements.themeToggle.textContent = state.isDarkMode ? '☀️' : '🌙';
+
+    // Body Classes (Mode & Theme)
+    elements.body.classList.toggle('work-mode', state.mode === 'work');
+    elements.body.classList.toggle('break-mode', state.mode === 'break');
+    elements.body.classList.toggle('dark-mode', state.isDarkMode);
+
+    // Browser Title
     document.title = `${formatTime(state.timeLeft)} - ${state.mode === 'work' ? 'Work' : 'Break'}`;
 
+    // Task List
     if (state.tasks !== lastTasks) {
         renderTasks(state.tasks);
         lastTasks = state.tasks;
@@ -197,6 +216,7 @@ elements.startBtn.addEventListener('click', () => timerStore.getState().startTim
 elements.pauseBtn.addEventListener('click', () => timerStore.getState().pauseTimer());
 elements.resetBtn.addEventListener('click', () => timerStore.getState().resetTimer());
 elements.clearBtn.addEventListener('click', () => timerStore.getState().clearProgress());
+elements.themeToggle.addEventListener('click', () => timerStore.getState().toggleDarkMode());
 
 const syncSettings = () => timerStore.getState().updateSettings(elements.workInput.value, elements.breakInput.value);
 elements.workInput.addEventListener('change', syncSettings);
