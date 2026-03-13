@@ -3,39 +3,65 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="A production-ready Pomodoro Timer built with Vanilla JS and Zustand.">
-    <title>Pomodoro Timer</title>
+    <meta name="description" content="Advanced Pomodoro Timer with custom durations and task management.">
+    <title>Pomodoro Timer Pro</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body class="work-mode">
     <main id="app" role="main">
-        <!-- State Indicator: Visual and Screen-Reader distinction between Work/Break -->
+        <!-- Phase 1: State & Timer Display -->
         <section id="state-indicator" aria-live="polite" aria-atomic="true">
             <h2 id="current-phase">Work Session</h2>
         </section>
 
-        <!-- Timer Display: MM:SS format -->
         <section id="timer-display">
             <time id="time-left" aria-live="assertive" aria-atomic="true">25:00</time>
         </section>
 
-        <!-- User Controls: Start, Pause, Reset -->
+        <!-- Phase 1: Core Controls -->
         <section id="controls">
             <button id="start-btn" type="button" aria-label="Start Timer">Start</button>
             <button id="pause-btn" type="button" aria-label="Pause Timer" hidden>Pause</button>
             <button id="reset-btn" type="button" aria-label="Reset Timer">Reset</button>
         </section>
 
-        <!-- Session Tracking: Persistent counter -->
+        <!-- Phase 2: Dynamic Settings -->
+        <details id="settings">
+            <summary>Timer Settings</summary>
+            <div class="settings-grid">
+                <label>
+                    Work (min)
+                    <input type="number" id="work-input" value="25" min="1" max="60">
+                </label>
+                <label>
+                    Break (min)
+                    <input type="number" id="break-input" value="5" min="1" max="30">
+                </label>
+            </div>
+        </details>
+
+        <!-- Phase 2: Task Management -->
+        <section id="task-management">
+            <h3>Tasks</h3>
+            <form id="task-form">
+                <input type="text" id="task-input" placeholder="What are you working on?" required maxlength="50" aria-label="New task name">
+                <button type="submit">Add</button>
+            </form>
+            <ul id="task-list" aria-live="polite">
+                <!-- Tasks injected by app.js -->
+            </ul>
+        </section>
+
+        <!-- Phase 1 & 2: Data Management -->
         <section id="session-tracking">
             <p>Completed Sessions: <span id="session-count">0</span></p>
-            <button id="clear-progress-btn" type="button" title="Clear all saved progress">
+            <button id="clear-progress-btn" type="button" title="Clear all sessions and tasks">
                 Reset All Progress
             </button>
         </section>
     </main>
 
-    <!-- Production Logic -->
+    <!-- Application Logic -->
     <script type="module" src="app.js"></script>
 </body>
 </html>
