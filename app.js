@@ -7,7 +7,7 @@
 import { createStore, persist, createJSONStorage } from './zustand.js';
 
 // 2. ASSET CONFIGURATION
-// Paste your Base64 string here for the notification icon
+// Placeholder for your icon path or Base64 string
 const NOTIFICATION_ICON = ""; 
 
 // 3. UTILITIES
