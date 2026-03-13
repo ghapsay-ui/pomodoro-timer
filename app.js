@@ -3,11 +3,12 @@
  * Features: Local Imports, Custom Durations, Task Management, Dark Mode, Persistence
  */
 
-// 1. LOCAL IMPORTS (Requires zustand.js in your project folder)
+// 1. LOCAL IMPORTS (Ensure zustand.js is in your project folder)
 import { createStore, persist, createJSONStorage } from './zustand.js';
 
 // 2. ASSET CONFIGURATION
-const NOTIFICATION_ICON = ""; // Paste your Base64 string or local path here
+// Paste your Base64 string here for the notification icon
+const NOTIFICATION_ICON = ""; 
 
 // 3. UTILITIES
 const playNotificationSound = () => {
@@ -24,7 +25,7 @@ const playNotificationSound = () => {
         gain.connect(ctx.destination);
         osc.start();
         osc.stop(ctx.currentTime + 0.5);
-    } catch (e) { console.warn("Audio blocked by browser."); }
+    } catch (e) { console.warn("Audio blocked by browser policy."); }
 };
 
 const triggerVisualNotification = (title, body) => {
