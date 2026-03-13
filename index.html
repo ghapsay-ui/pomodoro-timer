@@ -3,21 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Professional Pomodoro Timer with custom durations, task management, dark mode, and offline support.">
-    <meta name="theme-color" content="#e74c3c">
+    <meta name="description" content="Advanced Pomodoro Timer with custom durations and task management.">
     <title>Pomodoro Timer Pro</title>
-    
-    <!-- PWA Manifest -->
-    <link rel="manifest" href="manifest.json">
-    
-    <!-- Stylesheet -->
     <link rel="stylesheet" href="style.css">
 </head>
 <body class="work-mode">
     <main id="app" role="main">
-        <!-- Phase 3: Dark Mode Toggle -->
-        <button id="theme-toggle" type="button" aria-label="Toggle Dark Mode">🌙</button>
-
         <!-- Phase 1: State & Timer Display -->
         <section id="state-indicator" aria-live="polite" aria-atomic="true">
             <h2 id="current-phase">Work Session</h2>
@@ -61,7 +52,7 @@
             </ul>
         </section>
 
-        <!-- Data Management -->
+        <!-- Phase 1 & 2: Data Management -->
         <section id="session-tracking">
             <p>Completed Sessions: <span id="session-count">0</span></p>
             <button id="clear-progress-btn" type="button" title="Clear all sessions and tasks">
@@ -69,17 +60,6 @@
             </button>
         </section>
     </main>
-
-    <!-- PWA Service Worker Registration -->
-    <script>
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                navigator.serviceWorker.register('./sw.js')
-                    .then(() => console.log('PWA: Service Worker Active'))
-                    .catch(err => console.warn('PWA: Registration Failed', err));
-            });
-        }
-    </script>
 
     <!-- Application Logic -->
     <script type="module" src="app.js"></script>
