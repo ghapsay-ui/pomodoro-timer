@@ -97,7 +97,7 @@ body {
     font-weight: 800;
     margin: 0.5rem 0 1.5rem 0;
     display: block;
-    font-variant-numeric: tabular-nums;
+    font-variant-numeric: tabular-nums; /* Prevents jitter */
     color: var(--primary-color);
     transition: color var(--transition-speed) ease;
 }
