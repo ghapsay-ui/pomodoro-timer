@@ -1,13 +1,16 @@
 /**
- * Pomodoro Timer Pro - app.js (Phase 2)
- * Features: Dynamic Durations, Task Management, Persistence, Alerts
+ * Pomodoro Timer Pro - Definitive Version
+ * Features: Local Imports, Custom Durations, Task Management, Persistence
  */
 
-import { createStore } from 'https://esm.sh/zustand@4.5.2/vanilla';
-import { persist, createJSONStorage } from 'https://esm.sh/zustand@4.5.2/middleware';
+// 1. LOCAL IMPORTS (Ensure zustand.js is in your project folder)
+import { createStore, persist, createJSONStorage } from './zustand.js';
 
-// --- 1. UTILITIES: ALERTS & FORMATTING ---
+// 2. ASSET CONFIGURATION
+// Paste your Base64 string here or a local path like './icon.png'
+const NOTIFICATION_ICON = ""; 
 
+// 3. UTILITIES
 const playNotificationSound = () => {
     try {
         const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -22,12 +25,12 @@ const playNotificationSound = () => {
         gain.connect(ctx.destination);
         osc.start();
         osc.stop(ctx.currentTime + 0.5);
-    } catch (e) { console.warn("Audio blocked:", e); }
+    } catch (e) { console.warn("Audio blocked by browser policy."); }
 };
 
 const triggerVisualNotification = (title, body) => {
     if (Notification.permission === 'granted') {
-        new Notification(title, { body, icon: 'https://cdn-icons-png.flaticon.com/512/2553/2553391.png' });
+        new Notification(title, { body, icon: NOTIFICATION_ICON });
     }
 };
 
@@ -37,8 +40,7 @@ const formatTime = (seconds) => {
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
 };
 
-// --- 2. STATE ENGINE: ZUSTAND STORE ---
-
+// 4. STATE ENGINE: ZUSTAND STORE
 const timerStore = createStore(
     persist(
         (set, get) => ({
@@ -79,7 +81,7 @@ const timerStore = createStore(
                     set({ timeLeft: timeLeft - 1 });
                 } else {
                     playNotificationSound();
-                    triggerVisualNotification('Pomodoro', mode === 'work' ? 'Break time!' : 'Work time!');
+                    triggerVisualNotification('Pomodoro Pro', mode === 'work' ? 'Break time!' : 'Work time!');
                     if (mode === 'work') {
                         set({ mode: 'break', timeLeft: breakDuration * 60, sessionsCompleted: sessionsCompleted + 1 });
                     } else {
@@ -131,8 +133,7 @@ const timerStore = createStore(
     )
 );
 
-// --- 3. DOM CONTROLLER ---
-
+// 5. DOM CONTROLLER
 const elements = {
     timeLeft: document.getElementById('time-left'),
     currentPhase: document.getElementById('current-phase'),
@@ -191,7 +192,7 @@ timerStore.subscribe((state) => {
     }
 });
 
-// Listeners
+// Event Listeners
 elements.startBtn.addEventListener('click', () => timerStore.getState().startTimer());
 elements.pauseBtn.addEventListener('click', () => timerStore.getState().pauseTimer());
 elements.resetBtn.addEventListener('click', () => timerStore.getState().resetTimer());
@@ -214,7 +215,7 @@ elements.taskList.addEventListener('click', (e) => {
     if (e.target.classList.contains('task-delete')) timerStore.getState().deleteTask(id);
 });
 
-// Init
+// Initialization
 const init = timerStore.getState();
 elements.workInput.value = init.workDuration;
 elements.breakInput.value = init.breakDuration;
