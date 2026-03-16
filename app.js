@@ -1,5 +1,5 @@
 /**
- * Pomodoro Timer Pro - Orchestrated Version 5.0 (Definitive)
+ * Pomodoro Timer Pro - Orchestrated Version 5.1 (Definitive & Resilient)
  * Pillars: Distributed State, Ocular Ergonomics, Hardware Orchestration, Flow Analytics
  */
 
@@ -36,19 +36,25 @@ class HardwareManager {
     }
 
     async connect() {
-        if (!("serial" in navigator)) return alert("WebSerial not supported.");
+        if (!("serial" in navigator)) return alert("WebSerial not supported in this browser.");
         try {
             this.port = await navigator.serial.requestPort();
             await this.port.open({ baudRate: 9600 });
             this.writer = this.port.writable.getWriter();
-            document.getElementById('hardware-status').className = 'status-dot connected';
-        } catch (err) { console.error("Hardware Sync Failed", err); }
+            const dot = document.getElementById('hardware-status');
+            if (dot) dot.className = 'status-dot connected';
+            console.log("Physical Focus Shield: ONLINE");
+        } catch (err) { 
+            console.error("Hardware connection failed:", err); 
+        }
     }
 
     async sendCommand(cmd) {
         if (!this.writer) return;
-        const data = new TextEncoder().encode(cmd);
-        await this.writer.write(data);
+        try {
+            const data = new TextEncoder().encode(cmd);
+            await this.writer.write(data);
+        } catch (err) { console.warn("Serial Write Failed", err); }
     }
 }
 
@@ -57,12 +63,14 @@ const hardware = new HardwareManager();
 const requestWakeLock = async () => {
     if ('wakeLock' in navigator && !wakeLock) {
         try { wakeLock = await navigator.wakeLock.request('screen'); } 
-        catch (err) { console.warn("Wake Lock blocked."); }
+        catch (err) { console.warn("Wake Lock blocked by system."); }
     }
 };
 
 const releaseWakeLock = () => {
-    if (wakeLock) { wakeLock.release().then(() => wakeLock = null); }
+    if (wakeLock) {
+        wakeLock.release().then(() => wakeLock = null);
+    }
 };
 
 // --- 2. THE ORCHESTRATION ENGINE (STATE) ---
@@ -70,7 +78,6 @@ const releaseWakeLock = () => {
 const timerStore = createStore(
     persist(
         (set, get) => ({
-            // Core State
             timeLeft: 1500,
             workDuration: 25,
             breakDuration: 5,
@@ -109,11 +116,18 @@ const timerStore = createStore(
             },
 
             // --- ACTIONS ---
+            setIntention: (text) => {
+                set({ currentIntention: text });
+                get().broadcast();
+            },
+
             startTimer: async (isSync = false) => {
                 const state = get();
                 if (state.isActive || state.isBreathing) return;
 
+                if (Notification.permission === 'default') Notification.requestPermission();
                 await requestWakeLock();
+
                 const endTime = state.expectedEndTime || (Date.now() + (state.timeLeft * 1000));
                 set({ isActive: true, expectedEndTime: endTime });
                 timerWorker.postMessage({ command: 'START' });
@@ -151,7 +165,7 @@ const timerStore = createStore(
                 if (remaining >= 0) {
                     set({ timeLeft: remaining });
 
-                    // Ocular Logic
+                    // Ocular Logic (20-20-20 Rule)
                     if (mode === 'work' && !isEyeResting) {
                         const newActive = activeWorkSeconds + 1;
                         set({ activeWorkSeconds: newActive });
@@ -176,7 +190,8 @@ const timerStore = createStore(
 
             triggerTransition: (isSync = false) => {
                 const { mode, workDuration, breakDuration, sessionsCompleted } = get();
-                const nextStep = document.getElementById('next-step-input').value.trim();
+                const nextStepInput = document.getElementById('next-step-input');
+                const nextStep = nextStepInput ? nextStepInput.value.trim() : "";
                 
                 get().pauseTimer(true);
                 new Audio('https://actions.google.com/sounds/v1/alarms/beep_short.ogg').play().catch(() => {}); 
@@ -197,11 +212,17 @@ const timerStore = createStore(
                 }, 15000);
             },
 
-            // Analytics Logic
             calculateFlowScore: () => {
                 const { sessionsCompleted, distractionCount } = get();
                 if (sessionsCompleted === 0) return 0;
                 return Math.round((sessionsCompleted / (sessionsCompleted + (distractionCount * 0.5))) * 100);
+            },
+
+            getFlowInsight: (score) => {
+                if (score >= 90) return "Exceptional Focus. You are in a state of 'Hyper-Flow'.";
+                if (score >= 70) return "Strong Performance. Your cognitive endurance is high.";
+                if (score >= 50) return "Moderate Focus. Try to reduce tab-switching.";
+                return "High Entropy detected. Use the 20-20-20 rule to reset.";
             },
 
             addTask: (text) => {
@@ -217,6 +238,21 @@ const timerStore = createStore(
             deleteTask: (id) => {
                 set(state => ({ tasks: state.tasks.filter(t => t.id !== id) }));
                 get().broadcast();
+            },
+
+            logDistraction: () => {
+                if (get().isActive && get().mode === 'work') {
+                    set(state => ({ distractionCount: state.distractionCount + 1 }));
+                    get().broadcast();
+                }
+            },
+
+            clearProgress: () => {
+                if (confirm("Reset all data and sessions?")) {
+                    set({ sessionsCompleted: 0, distractionCount: 0, tasks: [], eyeRestsCompleted: 0 });
+                    get().resetTimer();
+                    get().broadcast();
+                }
             }
         }),
         {
@@ -261,10 +297,16 @@ const elements = {
     dashboard: document.getElementById('dashboard'),
     scoreFill: document.getElementById('score-fill'),
     scoreText: document.getElementById('score-text'),
-    flowInsight: document.getElementById('flow-insight')
+    flowInsight: document.getElementById('flow-insight'),
+    clearBtn: document.getElementById('clear-progress-btn'),
+    viewStatsBtn: document.getElementById('view-stats-btn'),
+    closeDashboard: document.getElementById('close-dashboard'),
+    rhythmMode: document.getElementById('rhythm-mode'),
+    hardwareBtn: document.getElementById('connect-hardware-btn')
 };
 
 const renderTasks = (tasks) => {
+    if (!elements.taskList) return;
     elements.taskList.innerHTML = '';
     tasks.forEach(task => {
         const li = document.createElement('li');
@@ -285,29 +327,35 @@ const renderTasks = (tasks) => {
 let lastSentMode = "";
 
 timerStore.subscribe((state) => {
-    const mins = Math.floor(state.timeLeft / 60).toString().padStart(2, '0');
-    const secs = (state.timeLeft % 60).toString().padStart(2, '0');
-    elements.timeLeft.textContent = `${mins}:${secs}`;
-    elements.currentPhase.textContent = state.mode === 'work' ? 'Work Session' : 'Break Time';
-    elements.sessionCount.textContent = state.sessionsCompleted;
+    if (elements.timeLeft) {
+        const mins = Math.floor(state.timeLeft / 60).toString().padStart(2, '0');
+        const secs = (state.timeLeft % 60).toString().padStart(2, '0');
+        elements.timeLeft.textContent = `${mins}:${secs}`;
+    }
+    if (elements.currentPhase) elements.currentPhase.textContent = state.mode === 'work' ? 'Work Session' : 'Break Time';
+    if (elements.sessionCount) elements.sessionCount.textContent = state.sessionsCompleted;
     
     // Overlays & Nudges
-    elements.breathingOverlay.classList.toggle('hidden', !state.isBreathing);
-    elements.eyeToast.classList.toggle('hidden', !state.isEyeResting);
-    if (state.isEyeResting) {
-        elements.eyeCountdown.textContent = state.eyeRestTimeLeft;
-        elements.eyeProgress.style.width = `${(state.eyeRestTimeLeft / 20) * 100}%`;
+    if (elements.breathingOverlay) elements.breathingOverlay.classList.toggle('hidden', !state.isBreathing);
+    if (elements.eyeToast) {
+        elements.eyeToast.classList.toggle('hidden', !state.isEyeResting);
+        if (state.isEyeResting && elements.eyeCountdown && elements.eyeProgress) {
+            elements.eyeCountdown.textContent = state.eyeRestTimeLeft;
+            elements.eyeProgress.style.width = `${(state.eyeRestTimeLeft / 20) * 100}%`;
+        }
     }
 
-    if (state.mode === 'work' && state.nextMicroStep && !state.isActive) {
-        elements.reentryNudge.classList.remove('hidden');
-        elements.reentryText.textContent = state.nextMicroStep;
-    } else {
-        elements.reentryNudge.classList.add('hidden');
+    if (elements.reentryNudge && elements.reentryText) {
+        if (state.mode === 'work' && state.nextMicroStep && !state.isActive) {
+            elements.reentryNudge.classList.remove('hidden');
+            elements.reentryText.textContent = state.nextMicroStep;
+        } else {
+            elements.reentryNudge.classList.add('hidden');
+        }
     }
 
     // Neural Arc (Ultradian)
-    if (state.rhythmMode === 'ultradian' && state.mode === 'work') {
+    if (state.rhythmMode === 'ultradian' && state.mode === 'work' && elements.neuralArcFill) {
         const percent = ((state.workDuration * 60 - state.timeLeft) / (state.workDuration * 60)) * 100;
         elements.neuralArcFill.style.width = `${percent}%`;
         elements.neuralArcFill.className = percent < 15 ? '' : (percent < 75 ? 'arc-peak' : 'arc-decline');
@@ -320,60 +368,112 @@ timerStore.subscribe((state) => {
     else if (state.isActive) cmd = state.mode === 'work' ? "W" : "K";
     if (cmd !== lastSentMode) { hardware.sendCommand(cmd); lastSentMode = cmd; }
 
-    elements.startBtn.hidden = state.isActive || state.isBreathing;
-    elements.pauseBtn.hidden = !state.isActive;
-    elements.body.className = `${state.mode}-mode`;
+    if (elements.startBtn) elements.startBtn.hidden = state.isActive || state.isBreathing;
+    if (elements.pauseBtn) elements.pauseBtn.hidden = !state.isActive;
+    if (elements.body) {
+        elements.body.className = `${state.mode}-mode`;
+        elements.body.classList.toggle('overlay-active', state.isBreathing || (elements.intentionOverlay && !elements.intentionOverlay.classList.contains('hidden')));
+    }
+    
+    document.title = state.isBreathing ? "Breathe..." : `${elements.timeLeft?.textContent || '00:00'} - ${state.mode}`;
     renderTasks(state.tasks);
 });
 
-// --- 5. EVENT BINDINGS ---
+// --- 5. RESILIENT EVENT BINDINGS ---
 
-elements.startBtn.addEventListener('click', () => {
-    const state = timerStore.getState();
-    if (state.mode === 'work' && !state.currentIntention) elements.intentionOverlay.classList.remove('hidden');
-    else state.startTimer();
-});
+const attachListeners = () => {
+    console.log("Pomodoro Pro: Attaching Listeners...");
 
-elements.intentionForm.addEventListener('submit', (e) => {
-    e.preventDefault();
-    timerStore.getState().setIntention(elements.intentionInput.value.trim());
-    elements.intentionOverlay.classList.add('hidden');
-    timerStore.getState().startTimer();
-});
+    if (elements.startBtn) {
+        elements.startBtn.addEventListener('click', () => {
+            const state = timerStore.getState();
+            if (state.mode === 'work' && !state.currentIntention) {
+                if (elements.intentionOverlay) elements.intentionOverlay.classList.remove('hidden');
+                if (elements.intentionInput) elements.intentionInput.focus();
+            } else {
+                state.startTimer();
+            }
+        });
+    }
 
-elements.pauseBtn.addEventListener('click', () => timerStore.getState().pauseTimer());
-elements.resetBtn.addEventListener('click', () => timerStore.getState().resetTimer());
-document.getElementById('rhythm-mode').addEventListener('change', (e) => timerStore.getState().updateRhythmMode(e.target.value));
-document.getElementById('connect-hardware-btn').addEventListener('click', () => hardware.connect());
+    if (elements.intentionForm) {
+        elements.intentionForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            if (elements.intentionInput) {
+                timerStore.getState().setIntention(elements.intentionInput.value.trim());
+                if (elements.intentionOverlay) elements.intentionOverlay.classList.add('hidden');
+                timerStore.getState().startTimer();
+            }
+        });
+    }
 
-elements.taskForm.addEventListener('submit', (e) => {
-    e.preventDefault();
-    timerStore.getState().addTask(elements.taskInput.value.trim());
-    elements.taskInput.value = '';
-});
+    if (elements.pauseBtn) elements.pauseBtn.addEventListener('click', () => timerStore.getState().pauseTimer());
+    if (elements.resetBtn) elements.resetBtn.addEventListener('click', () => timerStore.getState().resetTimer());
+    if (elements.clearBtn) elements.clearBtn.addEventListener('click', () => timerStore.getState().clearProgress());
+    if (elements.rhythmMode) elements.rhythmMode.addEventListener('change', (e) => timerStore.getState().updateRhythmMode(e.target.value));
+    if (elements.hardwareBtn) elements.hardwareBtn.addEventListener('click', () => hardware.connect());
 
-document.getElementById('view-stats-btn').addEventListener('click', () => {
-    const state = timerStore.getState();
-    const score = state.calculateFlowScore();
-    elements.scoreFill.setAttribute('stroke-dasharray', `${score}, 100`);
-    elements.scoreText.textContent = score;
-    document.getElementById('stat-sessions').textContent = state.sessionsCompleted;
-    document.getElementById('stat-distractions').textContent = state.distractionCount;
-    document.getElementById('stat-eye-rests').textContent = state.eyeRestsCompleted;
-    elements.dashboard.classList.remove('hidden');
-});
+    if (elements.taskForm && elements.taskInput) {
+        elements.taskForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const val = elements.taskInput.value.trim();
+            if (val) {
+                timerStore.getState().addTask(val);
+                elements.taskInput.value = '';
+            }
+        });
+    }
 
-document.getElementById('close-dashboard').addEventListener('click', () => elements.dashboard.classList.add('hidden'));
+    if (elements.viewStatsBtn) {
+        elements.viewStatsBtn.addEventListener('click', () => {
+            const state = timerStore.getState();
+            const score = state.calculateFlowScore();
+            if (elements.scoreFill) elements.scoreFill.setAttribute('stroke-dasharray', `${score}, 100`);
+            if (elements.scoreText) elements.scoreText.textContent = score;
+            if (elements.flowInsight) elements.flowInsight.textContent = state.getFlowInsight(score);
+            
+            const sSess = document.getElementById('stat-sessions');
+            const sDist = document.getElementById('stat-distractions');
+            const sEye = document.getElementById('stat-eye-rests');
+            if (sSess) sSess.textContent = state.sessionsCompleted;
+            if (sDist) sDist.textContent = state.distractionCount;
+            if (sEye) sEye.textContent = state.eyeRestsCompleted;
+            
+            if (elements.dashboard) elements.dashboard.classList.remove('hidden');
+        });
+    }
 
-syncChannel.onmessage = (e) => timerStore.getState().applyExternalSync(e.data);
-timerWorker.onmessage = () => timerStore.getState().tick();
-document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'hidden') timerStore.getState().logDistraction();
-    else if (timerStore.getState().isActive) requestWakeLock();
-});
+    if (elements.closeDashboard) {
+        elements.closeDashboard.addEventListener('click', () => {
+            if (elements.dashboard) elements.dashboard.classList.add('hidden');
+        });
+    }
+};
 
-// Initial Hydration
-const init = timerStore.getState();
-elements.workInput.value = init.workDuration;
-elements.breakInput.value = init.breakDuration;
-renderTasks(init.tasks);
+// --- 6. INITIALIZATION ---
+
+try {
+    const init = timerStore.getState();
+    if (elements.workInput) elements.workInput.value = init.workDuration;
+    if (elements.breakInput) elements.breakInput.value = init.breakDuration;
+    if (elements.rhythmMode) elements.rhythmMode.value = init.rhythmMode;
+    if (elements.app && init.rhythmMode === 'ultradian') elements.app.classList.add('ultradian-active');
+    
+    renderTasks(init.tasks);
+    attachListeners();
+
+    syncChannel.onmessage = (e) => timerStore.getState().applyExternalSync(e.data);
+    timerWorker.onmessage = () => timerStore.getState().tick();
+
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'hidden') {
+            timerStore.getState().logDistraction();
+        } else if (timerStore.getState().isActive) {
+            requestWakeLock();
+        }
+    });
+
+    console.log("Pomodoro Pro: SYSTEM ONLINE");
+} catch (error) {
+    console.error("Critical Initialization Error:", error);
+}
