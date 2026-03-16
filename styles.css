@@ -1,6 +1,6 @@
 /**
- * Pomodoro Timer Pro - Orchestrated Version 3.5
- * Features: Glassmorphism, Breathing Animations, Psychological Overlays
+ * Pomodoro Timer Pro - Orchestrated Version 4.0 (Final)
+ * Features: Glassmorphism, Breathing Animations, High-Contrast Accessibility
  */
 
 /* --- 1. VARIABLES & THEME ENGINE --- */
@@ -11,7 +11,7 @@
     --secondary-color: #34495e;
     --accent-color: #3498db;
     --card-bg: rgba(255, 255, 255, 0.9);
-    --overlay-bg: rgba(255, 255, 255, 0.7);
+    --overlay-bg: rgba(255, 255, 255, 0.75);
     --transition-speed: 0.5s;
 }
 
@@ -39,7 +39,13 @@ body {
     min-height: 100vh;
     color: var(--text-color);
     transition: background var(--transition-speed) ease;
-    overflow: hidden; /* Prevents scroll during overlays */
+    /* Mobile Resilience: Allow scrolling unless an overlay is active */
+    overflow-x: hidden;
+    padding: 20px;
+}
+
+body.overlay-active {
+    overflow: hidden;
 }
 
 /* --- 2. PSYCHOLOGICAL OVERLAYS (GLASSMORPHISM) --- */
@@ -75,8 +81,8 @@ body {
     width: 450px;
 }
 
-.overlay h2 { margin-bottom: 1rem; font-weight: 800; }
-.overlay p { color: #718096; margin-bottom: 2rem; }
+.overlay h2 { margin-bottom: 1rem; font-weight: 800; font-size: 2rem; }
+.overlay p { color: #718096; margin-bottom: 2rem; line-height: 1.5; }
 
 /* --- 3. BREATHING ANIMATION --- */
 .breathing-circle-container {
@@ -105,22 +111,24 @@ body {
 #app {
     background: var(--card-bg);
     backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
     padding: 2.5rem;
     border-radius: 2.5rem;
     box-shadow: 0 15px 35px rgba(0,0,0,0.05);
     width: 100%;
     max-width: 420px;
-    border: 1px solid rgba(255,255,255,0.3);
+    border: 1px solid rgba(255,255,255,0.4);
     position: relative;
     z-index: 10;
 }
 
 #active-intention-display {
     margin-top: 0.5rem;
-    font-size: 0.9rem;
+    font-size: 0.95rem;
     font-style: italic;
     color: var(--accent-color);
     animation: pulseText 3s infinite;
+    font-weight: 500;
 }
 
 @keyframes pulseText {
@@ -130,13 +138,13 @@ body {
 
 /* --- 5. TIMER & CONTROLS --- */
 #timer-display time {
-    font-size: 6rem;
+    font-size: 6.5rem;
     font-weight: 800;
     display: block;
     font-variant-numeric: tabular-nums;
     color: var(--primary-color);
-    margin: 1rem 0;
-    letter-spacing: -2px;
+    margin: 0.5rem 0;
+    letter-spacing: -3px;
 }
 
 #controls { display: flex; gap: 1rem; justify-content: center; margin-bottom: 2rem; }
@@ -144,53 +152,98 @@ body {
 button {
     padding: 0.8rem 2rem;
     border: none;
-    border-radius: 1rem;
+    border-radius: 1.2rem;
     font-weight: 700;
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    font-family: inherit;
 }
 
-.primary-btn, #start-btn { background: var(--primary-color); color: white; }
+button:focus-visible {
+    outline: 3px solid var(--accent-color);
+    outline-offset: 2px;
+}
+
+.primary-btn, #start-btn { 
+    background: var(--primary-color); 
+    color: white; 
+    box-shadow: 0 4px 14px rgba(231, 76, 60, 0.3);
+}
+
 #pause-btn { background: #cbd5e0; color: #4a5568; }
-#reset-btn { background: transparent; border: 2px solid #edf2f7; color: #a0aec0; }
+
+/* LINGUISTIC NUDGE: Enhanced Reset Button Contrast */
+#reset-btn { 
+    background: rgba(0, 0, 0, 0.03); 
+    border: 1px solid rgba(0, 0, 0, 0.08); 
+    color: #718096; 
+}
 
 button:hover { transform: translateY(-2px); filter: brightness(1.05); }
 button:active { transform: translateY(0); }
+#reset-btn:hover { background: rgba(0, 0, 0, 0.06); color: var(--secondary-color); }
 
 /* --- 6. SETTINGS & TASKS --- */
 #settings { margin-top: 2rem; border-top: 1px solid #edf2f7; padding-top: 1rem; }
-#settings summary { cursor: pointer; color: #a0aec0; font-size: 0.8rem; font-weight: 600; list-style: none; }
+#settings summary { cursor: pointer; color: #a0aec0; font-size: 0.85rem; font-weight: 600; list-style: none; padding: 0.5rem 0; }
 
 .settings-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 1rem;
+    gap: 1.5rem;
     margin-top: 1rem;
-    background: #f7fafc;
-    padding: 1rem;
-    border-radius: 1rem;
+    background: rgba(247, 250, 252, 0.8);
+    padding: 1.2rem;
+    border-radius: 1.2rem;
 }
 
-#task-management { margin-top: 2rem; text-align: left; }
-#task-form { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
-#task-input { flex: 1; padding: 0.8rem; border: 1px solid #edf2f7; border-radius: 0.8rem; }
+.settings-grid label { font-size: 0.75rem; font-weight: 700; color: #718096; text-transform: uppercase; }
+.settings-grid input { 
+    width: 100%; 
+    padding: 0.5rem; 
+    border: 1px solid #e2e8f0; 
+    border-radius: 0.5rem; 
+    margin-top: 0.4rem;
+    font-weight: 600;
+}
 
-#task-list { list-style: none; max-height: 150px; overflow-y: auto; }
+#task-management { margin-top: 2.5rem; text-align: left; }
+#task-management h3 { font-size: 1.1rem; margin-bottom: 1rem; }
+#task-form { display: flex; gap: 0.5rem; margin-bottom: 1.5rem; }
+#task-input { 
+    flex: 1; 
+    padding: 0.8rem 1rem; 
+    border: 1px solid #edf2f7; 
+    border-radius: 1rem; 
+    background: #f8fafc;
+    transition: border-color 0.2s;
+}
+#task-input:focus { outline: none; border-color: var(--accent-color); }
+
+#task-list { list-style: none; max-height: 200px; overflow-y: auto; padding-right: 5px; }
 .task-item {
     display: flex;
     align-items: center;
     gap: 0.8rem;
-    padding: 0.6rem 0;
-    border-bottom: 1px solid #f7fafc;
+    padding: 0.8rem;
+    background: white;
+    margin-bottom: 0.5rem;
+    border-radius: 0.8rem;
+    border: 1px solid #f1f5f9;
 }
 
 .task-item.completed span { text-decoration: line-through; color: #cbd5e0; }
-.task-delete { background: none; color: #fc8181; font-size: 1.2rem; padding: 0 5px; }
+.task-delete { background: none; color: #fc8181; font-size: 1.4rem; padding: 0 8px; margin-left: auto; box-shadow: none; }
+.task-delete:hover { color: #e53e3e; transform: scale(1.1); }
+
+#session-tracking { margin-top: 2rem; padding-top: 1rem; border-top: 1px solid #edf2f7; font-size: 0.9rem; color: #718096; }
+#clear-progress-btn { background: #fff5f5; color: #c53030; font-size: 0.8rem; padding: 0.5rem 1rem; margin-top: 1rem; width: 100%; }
 
 /* Utility Classes */
 .hidden { display: none !important; }
 [hidden] { display: none !important; }
 
 /* Custom Scrollbar */
-::-webkit-scrollbar { width: 5px; }
-::-webkit-scrollbar-thumb { background: #edf2f7; border-radius: 10px; }
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
