@@ -3,65 +3,81 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Advanced Pomodoro Timer with custom durations and task management.">
+    <meta name="description" content="Advanced Pomodoro Timer with psychological priming and breathing transitions.">
     <title>Pomodoro Timer Pro</title>
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="styles.css">
 </head>
 <body class="work-mode">
+    <!-- Psychological Pillar: Intention Priming Overlay -->
+    <section id="intention-overlay" class="overlay hidden" aria-modal="true" role="dialog">
+        <div class="overlay-content">
+            <h2>Set Your Intention</h2>
+            <p>What is the one thing you will finish in this session?</p>
+            <form id="intention-form">
+                <input type="text" id="intention-input" placeholder="e.g., Finish the report draft" required maxlength="60">
+                <button type="submit" class="primary-btn">Begin Focus</button>
+            </form>
+        </div>
+    </section>
+
+    <!-- Psychological Pillar: Breathing Transition Overlay -->
+    <section id="breathing-overlay" class="overlay hidden" aria-live="polite">
+        <div class="overlay-content">
+            <h2 id="breathing-instruction">Take a Breath</h2>
+            <div class="breathing-circle-container">
+                <div class="breathing-circle"></div>
+            </div>
+            <p id="breathing-subtext">Preparing your next session...</p>
+        </div>
+    </section>
+
     <main id="app" role="main">
-        <!-- Phase 1: State & Timer Display -->
-        <section id="state-indicator" aria-live="polite" aria-atomic="true">
+        <section id="state-indicator" aria-live="polite">
             <h2 id="current-phase">Work Session</h2>
+            <div id="active-intention-display" class="hidden">
+                Focusing on: <span id="current-intention-text"></span>
+            </div>
         </section>
 
         <section id="timer-display">
-            <time id="time-left" aria-live="assertive" aria-atomic="true">25:00</time>
+            <time id="time-left">25:00</time>
         </section>
 
-        <!-- Phase 1: Core Controls -->
         <section id="controls">
             <button id="start-btn" type="button" aria-label="Start Timer">Start</button>
             <button id="pause-btn" type="button" aria-label="Pause Timer" hidden>Pause</button>
             <button id="reset-btn" type="button" aria-label="Reset Timer">Reset</button>
         </section>
 
-        <!-- Phase 2: Dynamic Settings -->
         <details id="settings">
             <summary>Timer Settings</summary>
             <div class="settings-grid">
                 <label>
                     Work (min)
-                    <input type="number" id="work-input" value="25" min="1" max="60">
+                    <input type="number" id="work-input" value="25" min="1" max="60" step="1">
                 </label>
                 <label>
                     Break (min)
-                    <input type="number" id="break-input" value="5" min="1" max="30">
+                    <input type="number" id="break-input" value="5" min="1" max="30" step="1">
                 </label>
             </div>
         </details>
 
-        <!-- Phase 2: Task Management -->
         <section id="task-management">
             <h3>Tasks</h3>
             <form id="task-form">
-                <input type="text" id="task-input" placeholder="What are you working on?" required maxlength="50" aria-label="New task name">
+                <input type="text" id="task-input" placeholder="What are you working on?" required maxlength="50">
                 <button type="submit">Add</button>
             </form>
-            <ul id="task-list" aria-live="polite">
-                <!-- Tasks injected by app.js -->
-            </ul>
+            <ul id="task-list"></ul>
         </section>
 
-        <!-- Phase 1 & 2: Data Management -->
         <section id="session-tracking">
             <p>Completed Sessions: <span id="session-count">0</span></p>
-            <button id="clear-progress-btn" type="button" title="Clear all sessions and tasks">
-                Reset All Progress
-            </button>
+            <button id="clear-progress-btn" type="button">Reset All Progress</button>
         </section>
     </main>
 
-    <!-- Application Logic -->
     <script type="module" src="app.js"></script>
 </body>
 </html>
