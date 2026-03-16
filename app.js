@@ -1,6 +1,7 @@
 /**
- * Pomodoro Timer Pro - Orchestrated Version 5.2 (Definitive & Resilient)
+ * Pomodoro Timer Pro - Orchestrated Version 5.3 (Final & Fixed)
  * Pillars: Distributed State, Ocular Ergonomics, Hardware Orchestration, Flow Analytics
+ * Fix: Resolved DataCloneError by filtering non-serializable actions from BroadcastChannel.
  */
 
 import { createStore } from 'https://esm.sh/zustand@4.5.2/vanilla';
@@ -26,15 +27,8 @@ const timerWorker = new Worker(URL.createObjectURL(blob));
 const syncChannel = new BroadcastChannel('pomodoro_pro_sync');
 let wakeLock = null;
 
-/**
- * HardwareManager: Orchestrates physical environment via WebSerial
- */
 class HardwareManager {
-    constructor() {
-        this.port = null;
-        this.writer = null;
-    }
-
+    constructor() { this.port = null; this.writer = null; }
     async connect() {
         if (!("serial" in navigator)) return alert("WebSerial not supported.");
         try {
@@ -46,7 +40,6 @@ class HardwareManager {
             console.log("Hardware: ONLINE");
         } catch (err) { console.error("Hardware Sync Failed", err); }
     }
-
     async sendCommand(cmd) {
         if (!this.writer) return;
         try {
@@ -92,6 +85,7 @@ const timerStore = createStore(
             eyeRestTimeLeft: 20,
             activeWorkSeconds: 0,
 
+            // --- SYNC & BROADCAST ---
             applyExternalSync: (data) => {
                 const { type, payload } = data;
                 if (type === 'STATE_UPDATE') {
@@ -102,23 +96,40 @@ const timerStore = createStore(
             },
 
             broadcast: (overrides = {}) => {
+                const state = get();
+                // DETERMINISTIC FIX: Only broadcast serializable data, exclude functions
+                const serializableData = {
+                    timeLeft: state.timeLeft,
+                    isActive: state.isActive,
+                    isBreathing: state.isBreathing,
+                    mode: state.mode,
+                    rhythmMode: state.rhythmMode,
+                    expectedEndTime: state.expectedEndTime,
+                    currentIntention: state.currentIntention,
+                    nextMicroStep: state.nextMicroStep,
+                    activeWorkSeconds: state.activeWorkSeconds,
+                    isEyeResting: state.isEyeResting,
+                    eyeRestTimeLeft: state.eyeRestTimeLeft
+                };
+
                 syncChannel.postMessage({
                     type: 'STATE_UPDATE',
-                    payload: { ...get(), ...overrides }
+                    payload: { ...serializableData, ...overrides }
                 });
             },
 
+            // --- ACTIONS ---
             setIntention: (text) => {
                 set({ currentIntention: text });
                 get().broadcast();
             },
 
-            startTimer: async (isSync = false) => {
+            startTimer: async (isSync = false, force = false) => {
                 const state = get();
-                if (state.isActive || state.isBreathing) return;
+                if (!force && (state.isActive || state.isBreathing)) return;
 
                 await requestWakeLock();
-                const endTime = state.expectedEndTime || (Date.now() + (state.timeLeft * 1000));
+                const endTime = Date.now() + (state.timeLeft * 1000);
                 set({ isActive: true, expectedEndTime: endTime });
                 timerWorker.postMessage({ command: 'START' });
 
@@ -154,13 +165,11 @@ const timerStore = createStore(
                 const remaining = Math.round((expectedEndTime - Date.now()) / 1000);
                 if (remaining >= 0) {
                     set({ timeLeft: remaining });
-
                     if (mode === 'work' && !isEyeResting) {
                         const newActive = activeWorkSeconds + 1;
                         set({ activeWorkSeconds: newActive });
                         if (newActive > 0 && newActive % 1200 === 0) get().triggerEyeRest();
                     }
-
                     if (isEyeResting) {
                         const restLeft = get().eyeRestTimeLeft - 1;
                         if (restLeft <= 0) set({ isEyeResting: false, eyeRestTimeLeft: 20, eyeRestsCompleted: get().eyeRestsCompleted + 1 });
@@ -213,35 +222,11 @@ const timerStore = createStore(
                 return "Entropy detected. Use the 20-20-20 rule to reset.";
             },
 
-            addTask: (text) => {
-                set(state => ({ tasks: [...state.tasks, { id: crypto.randomUUID(), text, completed: false }] }));
-                get().broadcast();
-            },
-
-            toggleTask: (id) => {
-                set(state => ({ tasks: state.tasks.map(t => t.id === id ? { ...t, completed: !t.completed } : t) }));
-                get().broadcast();
-            },
-
-            deleteTask: (id) => {
-                set(state => ({ tasks: state.tasks.filter(t => t.id !== id) }));
-                get().broadcast();
-            },
-
-            logDistraction: () => {
-                if (get().isActive && get().mode === 'work') {
-                    set(state => ({ distractionCount: state.distractionCount + 1 }));
-                    get().broadcast();
-                }
-            },
-
-            clearProgress: () => {
-                if (confirm("Reset all data and sessions?")) {
-                    set({ sessionsCompleted: 0, distractionCount: 0, tasks: [], eyeRestsCompleted: 0 });
-                    get().resetTimer();
-                    get().broadcast();
-                }
-            }
+            addTask: (text) => { set(state => ({ tasks: [...state.tasks, { id: crypto.randomUUID(), text, completed: false }] })); get().broadcast(); },
+            toggleTask: (id) => { set(state => ({ tasks: state.tasks.map(t => t.id === id ? { ...t, completed: !t.completed } : t) })); get().broadcast(); },
+            deleteTask: (id) => { set(state => ({ tasks: state.tasks.filter(t => t.id !== id) })); get().broadcast(); },
+            logDistraction: () => { if (get().isActive && get().mode === 'work') { set(state => ({ distractionCount: state.distractionCount + 1 })); get().broadcast(); } },
+            clearProgress: () => { if (confirm("Reset all data?")) { set({ sessionsCompleted: 0, distractionCount: 0, tasks: [], eyeRestsCompleted: 0 }); get().resetTimer(); get().broadcast(); } }
         }),
         {
             name: 'pomodoro-pro-storage',
@@ -299,8 +284,7 @@ const renderTasks = (tasks) => {
     tasks.forEach(task => {
         const li = document.createElement('li');
         li.className = `task-item ${task.completed ? 'completed' : ''}`;
-        const cb = document.createElement('input');
-        cb.type = 'checkbox'; cb.checked = task.completed;
+        const cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = task.completed;
         cb.onclick = () => timerStore.getState().toggleTask(task.id);
         const span = document.createElement('span'); span.textContent = task.text;
         const del = document.createElement('button'); del.className = 'task-delete'; del.innerHTML = '&times;';
@@ -322,7 +306,6 @@ timerStore.subscribe((state) => {
     }
     if (elements.currentPhase) elements.currentPhase.textContent = state.mode === 'work' ? 'Work Session' : 'Break Time';
     if (elements.sessionCount) elements.sessionCount.textContent = state.sessionsCompleted;
-    
     if (elements.breathingOverlay) elements.breathingOverlay.classList.toggle('hidden', !state.isBreathing);
     if (elements.eyeToast) {
         elements.eyeToast.classList.toggle('hidden', !state.isEyeResting);
@@ -331,71 +314,52 @@ timerStore.subscribe((state) => {
             elements.eyeProgress.style.width = `${(state.eyeRestTimeLeft / 20) * 100}%`;
         }
     }
-
     if (elements.reentryNudge && elements.reentryText) {
         if (state.mode === 'work' && state.nextMicroStep && !state.isActive) {
             elements.reentryNudge.classList.remove('hidden');
             elements.reentryText.textContent = state.nextMicroStep;
-        } else {
-            elements.reentryNudge.classList.add('hidden');
-        }
+        } else { elements.reentryNudge.classList.add('hidden'); }
     }
-
     if (state.rhythmMode === 'ultradian' && state.mode === 'work' && elements.neuralArcFill) {
         const percent = ((state.workDuration * 60 - state.timeLeft) / (state.workDuration * 60)) * 100;
         elements.neuralArcFill.style.width = `${percent}%`;
         elements.neuralArcFill.className = percent < 15 ? '' : (percent < 75 ? 'arc-peak' : 'arc-decline');
     }
-
     let cmd = "S";
-    if (state.isBreathing) cmd = "B";
-    else if (state.isEyeResting) cmd = "R";
-    else if (state.isActive) cmd = state.mode === 'work' ? "W" : "K";
+    if (state.isBreathing) cmd = "B"; else if (state.isEyeResting) cmd = "R"; else if (state.isActive) cmd = state.mode === 'work' ? "W" : "K";
     if (cmd !== lastSentMode) { hardware.sendCommand(cmd); lastSentMode = cmd; }
-
     if (elements.startBtn) elements.startBtn.hidden = state.isActive || state.isBreathing;
     if (elements.pauseBtn) elements.pauseBtn.hidden = !state.isActive;
     if (elements.body) {
         elements.body.className = `${state.mode}-mode`;
         elements.body.classList.toggle('overlay-active', state.isBreathing || (elements.intentionOverlay && !elements.intentionOverlay.classList.contains('hidden')));
     }
-    
-    document.title = state.isBreathing ? "Breathe..." : `${elements.timeLeft?.textContent || '00:00'} - ${state.mode}`;
     renderTasks(state.tasks);
 });
 
 // --- 5. RESILIENT EVENT BINDINGS (EMERGENCY BYPASS) ---
 
 const attachListeners = () => {
-    console.log("System: Attaching Listeners...");
-
     if (elements.startBtn) {
         elements.startBtn.onclick = () => {
-            console.log("Diagnostic: Start Clicked");
             const state = timerStore.getState();
             if (state.mode === 'work' && !state.currentIntention) {
                 if (elements.intentionOverlay) elements.intentionOverlay.classList.remove('hidden');
                 if (elements.intentionInput) elements.intentionInput.focus();
-            } else {
-                state.startTimer();
-            }
+            } else { state.startTimer(); }
         };
     }
 
-    // DIRECT BUTTON CLICK BYPASS
     const beginFocusBtn = document.querySelector('#intention-form button[type="submit"]');
     if (beginFocusBtn) {
         beginFocusBtn.onclick = (e) => {
             e.preventDefault();
-            console.log("Diagnostic: Begin Focus Clicked");
             const text = elements.intentionInput.value.trim();
             if (text) {
                 timerStore.getState().setIntention(text);
                 if (elements.intentionOverlay) elements.intentionOverlay.classList.add('hidden');
-                timerStore.getState().startTimer();
-            } else {
-                alert("Please enter an intention.");
-            }
+                timerStore.getState().startTimer(false, true); // FORCE START
+            } else { alert("Please enter an intention."); }
         };
     }
 
@@ -404,18 +368,13 @@ const attachListeners = () => {
     if (elements.clearBtn) elements.clearBtn.onclick = () => timerStore.getState().clearProgress();
     if (elements.rhythmMode) elements.rhythmMode.onchange = (e) => timerStore.getState().updateRhythmMode(e.target.value);
     if (elements.hardwareBtn) elements.hardwareBtn.onclick = () => hardware.connect();
-
     if (elements.taskForm) {
         elements.taskForm.onsubmit = (e) => {
             e.preventDefault();
             const val = elements.taskInput.value.trim();
-            if (val) {
-                timerStore.getState().addTask(val);
-                elements.taskInput.value = '';
-            }
+            if (val) { timerStore.getState().addTask(val); elements.taskInput.value = ''; }
         };
     }
-
     if (elements.viewStatsBtn) {
         elements.viewStatsBtn.onclick = () => {
             const state = timerStore.getState();
@@ -423,23 +382,12 @@ const attachListeners = () => {
             if (elements.scoreFill) elements.scoreFill.setAttribute('stroke-dasharray', `${score}, 100`);
             if (elements.scoreText) elements.scoreText.textContent = score;
             if (elements.flowInsight) elements.flowInsight.textContent = state.getFlowInsight(score);
-            
-            const sSess = document.getElementById('stat-sessions');
-            const sDist = document.getElementById('stat-distractions');
-            const sEye = document.getElementById('stat-eye-rests');
-            if (sSess) sSess.textContent = state.sessionsCompleted;
-            if (sDist) sDist.textContent = state.distractionCount;
-            if (sEye) sEye.textContent = state.eyeRestsCompleted;
-            
+            const sSess = document.getElementById('stat-sessions'), sDist = document.getElementById('stat-distractions'), sEye = document.getElementById('stat-eye-rests');
+            if (sSess) sSess.textContent = state.sessionsCompleted; if (sDist) sDist.textContent = state.distractionCount; if (sEye) sEye.textContent = state.eyeRestsCompleted;
             if (elements.dashboard) elements.dashboard.classList.remove('hidden');
         };
     }
-
-    if (elements.closeDashboard) {
-        elements.closeDashboard.onclick = () => {
-            if (elements.dashboard) elements.dashboard.classList.add('hidden');
-        };
-    }
+    if (elements.closeDashboard) elements.closeDashboard.onclick = () => { if (elements.dashboard) elements.dashboard.classList.add('hidden'); };
 };
 
 // --- 6. INITIALIZATION ---
@@ -450,19 +398,13 @@ try {
     if (elements.breakInput) elements.breakInput.value = init.breakDuration;
     if (elements.rhythmMode) elements.rhythmMode.value = init.rhythmMode;
     if (elements.app && init.rhythmMode === 'ultradian') elements.app.classList.add('ultradian-active');
-    
     renderTasks(init.tasks);
     attachListeners();
-
     syncChannel.onmessage = (e) => timerStore.getState().applyExternalSync(e.data);
     timerWorker.onmessage = () => timerStore.getState().tick();
-
     document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'hidden') timerStore.getState().logDistraction();
         else if (timerStore.getState().isActive) requestWakeLock();
     });
-
     console.log("System: ONLINE");
-} catch (error) {
-    console.error("Initialization Error:", error);
-}
+} catch (error) { console.error("Initialization Error:", error); }
