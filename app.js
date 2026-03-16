@@ -1,7 +1,6 @@
 /**
- * Pomodoro Timer Pro - Orchestrated Version 5.3 (Final & Fixed)
- * Pillars: Distributed State, Ocular Ergonomics, Hardware Orchestration, Flow Analytics
- * Fix: Resolved DataCloneError by filtering non-serializable actions from BroadcastChannel.
+ * Pomodoro Timer Pro - Orchestrated Version 5.4 (Final & Bulletproof)
+ * Fix: Nuclear JSON Serialization to prevent DataCloneError on BroadcastChannel.
  */
 
 import { createStore } from 'https://esm.sh/zustand@4.5.2/vanilla';
@@ -37,7 +36,6 @@ class HardwareManager {
             this.writer = this.port.writable.getWriter();
             const dot = document.getElementById('hardware-status');
             if (dot) dot.className = 'status-dot connected';
-            console.log("Hardware: ONLINE");
         } catch (err) { console.error("Hardware Sync Failed", err); }
     }
     async sendCommand(cmd) {
@@ -85,7 +83,6 @@ const timerStore = createStore(
             eyeRestTimeLeft: 20,
             activeWorkSeconds: 0,
 
-            // --- SYNC & BROADCAST ---
             applyExternalSync: (data) => {
                 const { type, payload } = data;
                 if (type === 'STATE_UPDATE') {
@@ -97,8 +94,10 @@ const timerStore = createStore(
 
             broadcast: (overrides = {}) => {
                 const state = get();
-                // DETERMINISTIC FIX: Only broadcast serializable data, exclude functions
-                const serializableData = {
+                
+                // NUCLEAR FIX: JSON serialization strips ALL functions/symbols.
+                // This is the only 100% way to prevent DataCloneError.
+                const dataOnly = JSON.parse(JSON.stringify({
                     timeLeft: state.timeLeft,
                     isActive: state.isActive,
                     isBreathing: state.isBreathing,
@@ -109,16 +108,16 @@ const timerStore = createStore(
                     nextMicroStep: state.nextMicroStep,
                     activeWorkSeconds: state.activeWorkSeconds,
                     isEyeResting: state.isEyeResting,
-                    eyeRestTimeLeft: state.eyeRestTimeLeft
-                };
+                    eyeRestTimeLeft: state.eyeRestTimeLeft,
+                    ...overrides
+                }));
 
                 syncChannel.postMessage({
                     type: 'STATE_UPDATE',
-                    payload: { ...serializableData, ...overrides }
+                    payload: dataOnly
                 });
             },
 
-            // --- ACTIONS ---
             setIntention: (text) => {
                 set({ currentIntention: text });
                 get().broadcast();
@@ -404,7 +403,7 @@ try {
     timerWorker.onmessage = () => timerStore.getState().tick();
     document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'hidden') timerStore.getState().logDistraction();
-        else if (timerStore.getState().isActive) requestWakeLock();
+        else if (timerStore.isActive) requestWakeLock();
     });
     console.log("System: ONLINE");
 } catch (error) { console.error("Initialization Error:", error); }
