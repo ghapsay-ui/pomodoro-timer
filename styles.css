@@ -1,6 +1,6 @@
 /**
- * Pomodoro Timer Pro - Orchestrated Version 4.0 (Final)
- * Features: Glassmorphism, Breathing Animations, High-Contrast Accessibility
+ * Pomodoro Timer Pro - Orchestrated Version 5.0 (Definitive)
+ * Features: Glassmorphism, Neural Arc, Ocular Ergonomics, Analytics Dashboard
  */
 
 /* --- 1. VARIABLES & THEME ENGINE --- */
@@ -39,7 +39,6 @@ body {
     min-height: 100vh;
     color: var(--text-color);
     transition: background var(--transition-speed) ease;
-    /* Mobile Resilience: Allow scrolling unless an overlay is active */
     overflow-x: hidden;
     padding: 20px;
 }
@@ -89,8 +88,8 @@ body.overlay-active {
     display: flex;
     justify-content: center;
     align-items: center;
-    height: 200px;
-    margin: 2rem 0;
+    height: 180px;
+    margin: 1.5rem 0;
 }
 
 .breathing-circle {
@@ -122,20 +121,6 @@ body.overlay-active {
     z-index: 10;
 }
 
-#active-intention-display {
-    margin-top: 0.5rem;
-    font-size: 0.95rem;
-    font-style: italic;
-    color: var(--accent-color);
-    animation: pulseText 3s infinite;
-    font-weight: 500;
-}
-
-@keyframes pulseText {
-    0%, 100% { opacity: 0.7; }
-    50% { opacity: 1; }
-}
-
 /* --- 5. TIMER & CONTROLS --- */
 #timer-display time {
     font-size: 6.5rem;
@@ -145,6 +130,7 @@ body.overlay-active {
     color: var(--primary-color);
     margin: 0.5rem 0;
     letter-spacing: -3px;
+    text-align: center;
 }
 
 #controls { display: flex; gap: 1rem; justify-content: center; margin-bottom: 2rem; }
@@ -159,20 +145,12 @@ button {
     font-family: inherit;
 }
 
-button:focus-visible {
-    outline: 3px solid var(--accent-color);
-    outline-offset: 2px;
-}
-
 .primary-btn, #start-btn { 
     background: var(--primary-color); 
     color: white; 
     box-shadow: 0 4px 14px rgba(231, 76, 60, 0.3);
 }
 
-#pause-btn { background: #cbd5e0; color: #4a5568; }
-
-/* LINGUISTIC NUDGE: Enhanced Reset Button Contrast */
 #reset-btn { 
     background: rgba(0, 0, 0, 0.03); 
     border: 1px solid rgba(0, 0, 0, 0.08); 
@@ -181,46 +159,142 @@ button:focus-visible {
 
 button:hover { transform: translateY(-2px); filter: brightness(1.05); }
 button:active { transform: translateY(0); }
-#reset-btn:hover { background: rgba(0, 0, 0, 0.06); color: var(--secondary-color); }
 
-/* --- 6. SETTINGS & TASKS --- */
-#settings { margin-top: 2rem; border-top: 1px solid #edf2f7; padding-top: 1rem; }
-#settings summary { cursor: pointer; color: #a0aec0; font-size: 0.85rem; font-weight: 600; list-style: none; padding: 0.5rem 0; }
+/* --- 6. EYE-STRAIN MITIGATION (TOAST) --- */
+.toast {
+    position: fixed;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 2000;
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(10px);
+    padding: 1rem 1.5rem;
+    border-radius: 1.2rem;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+    border: 1px solid rgba(52, 152, 219, 0.2);
+    transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
 
+.toast.hidden { top: -100px; opacity: 0; }
+.toast-content { display: flex; align-items: center; gap: 1rem; position: relative; }
+.toast .text-group strong { display: block; font-size: 0.9rem; color: var(--accent-color); }
+.toast .text-group p { font-size: 0.8rem; color: #718096; margin: 0; }
+
+.toast-progress-container {
+    position: absolute;
+    bottom: -10px;
+    left: 0;
+    width: 100%;
+    height: 3px;
+    background: #edf2f7;
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.toast-progress-bar {
+    height: 100%;
+    background: var(--accent-color);
+    width: 100%;
+    transition: width 1s linear;
+}
+
+/* --- 7. ULTRADIAN NEURAL ARC --- */
+.neural-arc-container {
+    width: 100%;
+    height: 6px;
+    background: #edf2f7;
+    border-radius: 10px;
+    margin: 1.5rem 0;
+    overflow: hidden;
+    display: none;
+}
+
+#app.ultradian-active .neural-arc-container { display: block; }
+
+#neural-arc-fill {
+    height: 100%;
+    width: 0%;
+    transition: width 1s linear, background-color 5s ease;
+    background: #3498db;
+}
+
+.arc-peak { background: #9b59b6 !important; }
+.arc-decline { background: #e67e22 !important; }
+
+/* --- 8. PHYSICAL ORCHESTRATION UI --- */
+#connect-hardware-btn { width: 100%; margin-top: 0.5rem; font-size: 0.8rem; background: #edf2f7; color: #4a5568; }
+.status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-left: 8px; vertical-align: middle; }
+.status-dot.connected { background: #2ecc71; box-shadow: 0 0 8px #2ecc71; }
+.status-dot.disconnected { background: #cbd5e0; }
+
+/* --- 9. ZEIGARNIK RE-ENTRY NUDGE --- */
+#next-step-input {
+    width: 100%;
+    padding: 0.8rem;
+    border: 2px solid var(--primary-color);
+    border-radius: 0.8rem;
+    margin-top: 0.5rem;
+    text-align: center;
+    font-weight: 600;
+}
+
+#reentry-nudge {
+    background: #fffaf0;
+    border-left: 4px solid #ed8936;
+    padding: 1rem;
+    border-radius: 0.8rem;
+    margin-bottom: 1.5rem;
+    animation: slideInRight 0.5s ease;
+}
+
+#reentry-nudge strong { color: #dd6b20; font-size: 0.75rem; text-transform: uppercase; display: block; }
+#reentry-text { font-style: italic; color: #7b341e; }
+
+/* --- 10. DETERMINISTIC ANALYTICS DASHBOARD --- */
+#dashboard {
+    position: absolute;
+    top: 0; left: 0; width: 100%; height: 100%;
+    background: white;
+    z-index: 50;
+    padding: 2rem;
+    border-radius: 2.5rem;
+    animation: slideUp 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    overflow-y: auto;
+}
+
+.dashboard-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; }
+.stats-grid { display: grid; grid-template-columns: 1fr; gap: 2rem; }
+
+.score-circle { width: 150px; margin: 0 auto; }
+.circular-chart { display: block; margin: 10px auto; max-width: 100%; }
+.circle-bg { fill: none; stroke: #edf2f7; stroke-width: 2.8; }
+.circle { fill: none; stroke: var(--primary-color); stroke-width: 2.8; stroke-linecap: round; transition: stroke-dasharray 1s ease; }
+.percentage { fill: var(--text-color); font-weight: 800; font-size: 0.5rem; text-anchor: middle; }
+
+.stat-details { display: flex; flex-direction: column; gap: 1rem; }
+.detail-item { display: flex; justify-content: space-between; padding: 0.8rem; background: #f8fafc; border-radius: 1rem; }
+.detail-item span { font-size: 0.85rem; color: #718096; }
+.detail-item strong.penalty { color: #e53e3e; }
+
+.analytics-insight { margin-top: 2rem; font-size: 0.85rem; font-style: italic; color: #4a5568; text-align: center; line-height: 1.4; }
+
+#view-stats-btn { width: 100%; margin-top: 1rem; border: none; background: none; color: #a0aec0; font-size: 0.8rem; text-decoration: underline; cursor: pointer; }
+
+/* --- 11. SETTINGS & TASKS --- */
 .settings-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 1.5rem;
+    gap: 1rem;
     margin-top: 1rem;
     background: rgba(247, 250, 252, 0.8);
     padding: 1.2rem;
     border-radius: 1.2rem;
 }
 
-.settings-grid label { font-size: 0.75rem; font-weight: 700; color: #718096; text-transform: uppercase; }
-.settings-grid input { 
-    width: 100%; 
-    padding: 0.5rem; 
-    border: 1px solid #e2e8f0; 
-    border-radius: 0.5rem; 
-    margin-top: 0.4rem;
-    font-weight: 600;
-}
+.full-width { grid-column: 1 / -1; }
 
-#task-management { margin-top: 2.5rem; text-align: left; }
-#task-management h3 { font-size: 1.1rem; margin-bottom: 1rem; }
-#task-form { display: flex; gap: 0.5rem; margin-bottom: 1.5rem; }
-#task-input { 
-    flex: 1; 
-    padding: 0.8rem 1rem; 
-    border: 1px solid #edf2f7; 
-    border-radius: 1rem; 
-    background: #f8fafc;
-    transition: border-color 0.2s;
-}
-#task-input:focus { outline: none; border-color: var(--accent-color); }
-
-#task-list { list-style: none; max-height: 200px; overflow-y: auto; padding-right: 5px; }
+#task-list { list-style: none; max-height: 180px; overflow-y: auto; margin-top: 1rem; }
 .task-item {
     display: flex;
     align-items: center;
@@ -233,17 +307,15 @@ button:active { transform: translateY(0); }
 }
 
 .task-item.completed span { text-decoration: line-through; color: #cbd5e0; }
-.task-delete { background: none; color: #fc8181; font-size: 1.4rem; padding: 0 8px; margin-left: auto; box-shadow: none; }
-.task-delete:hover { color: #e53e3e; transform: scale(1.1); }
+.task-delete { background: none; color: #fc8181; font-size: 1.4rem; padding: 0 8px; margin-left: auto; }
 
-#session-tracking { margin-top: 2rem; padding-top: 1rem; border-top: 1px solid #edf2f7; font-size: 0.9rem; color: #718096; }
-#clear-progress-btn { background: #fff5f5; color: #c53030; font-size: 0.8rem; padding: 0.5rem 1rem; margin-top: 1rem; width: 100%; }
-
-/* Utility Classes */
+/* Utility & Animations */
 .hidden { display: none !important; }
 [hidden] { display: none !important; }
 
-/* Custom Scrollbar */
+@keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+@keyframes slideInRight { from { transform: translateX(30px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
-::-webkit-scrollbar-track { background: transparent; }
