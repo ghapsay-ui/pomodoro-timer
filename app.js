@@ -1,5 +1,5 @@
 /**
- * Pomodoro Timer Pro - Orchestrated Version 5.1 (Definitive & Resilient)
+ * Pomodoro Timer Pro - Orchestrated Version 5.2 (Definitive & Resilient)
  * Pillars: Distributed State, Ocular Ergonomics, Hardware Orchestration, Flow Analytics
  */
 
@@ -36,17 +36,15 @@ class HardwareManager {
     }
 
     async connect() {
-        if (!("serial" in navigator)) return alert("WebSerial not supported in this browser.");
+        if (!("serial" in navigator)) return alert("WebSerial not supported.");
         try {
             this.port = await navigator.serial.requestPort();
             await this.port.open({ baudRate: 9600 });
             this.writer = this.port.writable.getWriter();
             const dot = document.getElementById('hardware-status');
             if (dot) dot.className = 'status-dot connected';
-            console.log("Physical Focus Shield: ONLINE");
-        } catch (err) { 
-            console.error("Hardware connection failed:", err); 
-        }
+            console.log("Hardware: ONLINE");
+        } catch (err) { console.error("Hardware Sync Failed", err); }
     }
 
     async sendCommand(cmd) {
@@ -63,14 +61,12 @@ const hardware = new HardwareManager();
 const requestWakeLock = async () => {
     if ('wakeLock' in navigator && !wakeLock) {
         try { wakeLock = await navigator.wakeLock.request('screen'); } 
-        catch (err) { console.warn("Wake Lock blocked by system."); }
+        catch (err) { console.warn("Wake Lock blocked."); }
     }
 };
 
 const releaseWakeLock = () => {
-    if (wakeLock) {
-        wakeLock.release().then(() => wakeLock = null);
-    }
+    if (wakeLock) { wakeLock.release().then(() => wakeLock = null); }
 };
 
 // --- 2. THE ORCHESTRATION ENGINE (STATE) ---
@@ -92,13 +88,10 @@ const timerStore = createStore(
             currentIntention: "",
             nextMicroStep: "",
             expectedEndTime: null,
-            
-            // Ocular & Neural State
             isEyeResting: false,
             eyeRestTimeLeft: 20,
             activeWorkSeconds: 0,
 
-            // --- SYNC & BROADCAST ---
             applyExternalSync: (data) => {
                 const { type, payload } = data;
                 if (type === 'STATE_UPDATE') {
@@ -115,7 +108,6 @@ const timerStore = createStore(
                 });
             },
 
-            // --- ACTIONS ---
             setIntention: (text) => {
                 set({ currentIntention: text });
                 get().broadcast();
@@ -125,9 +117,7 @@ const timerStore = createStore(
                 const state = get();
                 if (state.isActive || state.isBreathing) return;
 
-                if (Notification.permission === 'default') Notification.requestPermission();
                 await requestWakeLock();
-
                 const endTime = state.expectedEndTime || (Date.now() + (state.timeLeft * 1000));
                 set({ isActive: true, expectedEndTime: endTime });
                 timerWorker.postMessage({ command: 'START' });
@@ -165,7 +155,6 @@ const timerStore = createStore(
                 if (remaining >= 0) {
                     set({ timeLeft: remaining });
 
-                    // Ocular Logic (20-20-20 Rule)
                     if (mode === 'work' && !isEyeResting) {
                         const newActive = activeWorkSeconds + 1;
                         set({ activeWorkSeconds: newActive });
@@ -219,10 +208,9 @@ const timerStore = createStore(
             },
 
             getFlowInsight: (score) => {
-                if (score >= 90) return "Exceptional Focus. You are in a state of 'Hyper-Flow'.";
-                if (score >= 70) return "Strong Performance. Your cognitive endurance is high.";
-                if (score >= 50) return "Moderate Focus. Try to reduce tab-switching.";
-                return "High Entropy detected. Use the 20-20-20 rule to reset.";
+                if (score >= 90) return "Exceptional Focus. You are in 'Hyper-Flow'.";
+                if (score >= 70) return "Strong Performance. Cognitive endurance is high.";
+                return "Entropy detected. Use the 20-20-20 rule to reset.";
             },
 
             addTask: (text) => {
@@ -335,7 +323,6 @@ timerStore.subscribe((state) => {
     if (elements.currentPhase) elements.currentPhase.textContent = state.mode === 'work' ? 'Work Session' : 'Break Time';
     if (elements.sessionCount) elements.sessionCount.textContent = state.sessionsCompleted;
     
-    // Overlays & Nudges
     if (elements.breathingOverlay) elements.breathingOverlay.classList.toggle('hidden', !state.isBreathing);
     if (elements.eyeToast) {
         elements.eyeToast.classList.toggle('hidden', !state.isEyeResting);
@@ -354,14 +341,12 @@ timerStore.subscribe((state) => {
         }
     }
 
-    // Neural Arc (Ultradian)
     if (state.rhythmMode === 'ultradian' && state.mode === 'work' && elements.neuralArcFill) {
         const percent = ((state.workDuration * 60 - state.timeLeft) / (state.workDuration * 60)) * 100;
         elements.neuralArcFill.style.width = `${percent}%`;
         elements.neuralArcFill.className = percent < 15 ? '' : (percent < 75 ? 'arc-peak' : 'arc-decline');
     }
 
-    // Hardware Command
     let cmd = "S";
     if (state.isBreathing) cmd = "B";
     else if (state.isEyeResting) cmd = "R";
@@ -379,13 +364,14 @@ timerStore.subscribe((state) => {
     renderTasks(state.tasks);
 });
 
-// --- 5. RESILIENT EVENT BINDINGS ---
+// --- 5. RESILIENT EVENT BINDINGS (EMERGENCY BYPASS) ---
 
 const attachListeners = () => {
-    console.log("Pomodoro Pro: Attaching Listeners...");
+    console.log("System: Attaching Listeners...");
 
     if (elements.startBtn) {
-        elements.startBtn.addEventListener('click', () => {
+        elements.startBtn.onclick = () => {
+            console.log("Diagnostic: Start Clicked");
             const state = timerStore.getState();
             if (state.mode === 'work' && !state.currentIntention) {
                 if (elements.intentionOverlay) elements.intentionOverlay.classList.remove('hidden');
@@ -393,39 +379,45 @@ const attachListeners = () => {
             } else {
                 state.startTimer();
             }
-        });
+        };
     }
 
-    if (elements.intentionForm) {
-        elements.intentionForm.addEventListener('submit', (e) => {
+    // DIRECT BUTTON CLICK BYPASS
+    const beginFocusBtn = document.querySelector('#intention-form button[type="submit"]');
+    if (beginFocusBtn) {
+        beginFocusBtn.onclick = (e) => {
             e.preventDefault();
-            if (elements.intentionInput) {
-                timerStore.getState().setIntention(elements.intentionInput.value.trim());
+            console.log("Diagnostic: Begin Focus Clicked");
+            const text = elements.intentionInput.value.trim();
+            if (text) {
+                timerStore.getState().setIntention(text);
                 if (elements.intentionOverlay) elements.intentionOverlay.classList.add('hidden');
                 timerStore.getState().startTimer();
+            } else {
+                alert("Please enter an intention.");
             }
-        });
+        };
     }
 
-    if (elements.pauseBtn) elements.pauseBtn.addEventListener('click', () => timerStore.getState().pauseTimer());
-    if (elements.resetBtn) elements.resetBtn.addEventListener('click', () => timerStore.getState().resetTimer());
-    if (elements.clearBtn) elements.clearBtn.addEventListener('click', () => timerStore.getState().clearProgress());
-    if (elements.rhythmMode) elements.rhythmMode.addEventListener('change', (e) => timerStore.getState().updateRhythmMode(e.target.value));
-    if (elements.hardwareBtn) elements.hardwareBtn.addEventListener('click', () => hardware.connect());
+    if (elements.pauseBtn) elements.pauseBtn.onclick = () => timerStore.getState().pauseTimer();
+    if (elements.resetBtn) elements.resetBtn.onclick = () => timerStore.getState().resetTimer();
+    if (elements.clearBtn) elements.clearBtn.onclick = () => timerStore.getState().clearProgress();
+    if (elements.rhythmMode) elements.rhythmMode.onchange = (e) => timerStore.getState().updateRhythmMode(e.target.value);
+    if (elements.hardwareBtn) elements.hardwareBtn.onclick = () => hardware.connect();
 
-    if (elements.taskForm && elements.taskInput) {
-        elements.taskForm.addEventListener('submit', (e) => {
+    if (elements.taskForm) {
+        elements.taskForm.onsubmit = (e) => {
             e.preventDefault();
             const val = elements.taskInput.value.trim();
             if (val) {
                 timerStore.getState().addTask(val);
                 elements.taskInput.value = '';
             }
-        });
+        };
     }
 
     if (elements.viewStatsBtn) {
-        elements.viewStatsBtn.addEventListener('click', () => {
+        elements.viewStatsBtn.onclick = () => {
             const state = timerStore.getState();
             const score = state.calculateFlowScore();
             if (elements.scoreFill) elements.scoreFill.setAttribute('stroke-dasharray', `${score}, 100`);
@@ -440,13 +432,13 @@ const attachListeners = () => {
             if (sEye) sEye.textContent = state.eyeRestsCompleted;
             
             if (elements.dashboard) elements.dashboard.classList.remove('hidden');
-        });
+        };
     }
 
     if (elements.closeDashboard) {
-        elements.closeDashboard.addEventListener('click', () => {
+        elements.closeDashboard.onclick = () => {
             if (elements.dashboard) elements.dashboard.classList.add('hidden');
-        });
+        };
     }
 };
 
@@ -466,14 +458,11 @@ try {
     timerWorker.onmessage = () => timerStore.getState().tick();
 
     document.addEventListener('visibilitychange', () => {
-        if (document.visibilityState === 'hidden') {
-            timerStore.getState().logDistraction();
-        } else if (timerStore.getState().isActive) {
-            requestWakeLock();
-        }
+        if (document.visibilityState === 'hidden') timerStore.getState().logDistraction();
+        else if (timerStore.getState().isActive) requestWakeLock();
     });
 
-    console.log("Pomodoro Pro: SYSTEM ONLINE");
+    console.log("System: ONLINE");
 } catch (error) {
-    console.error("Critical Initialization Error:", error);
+    console.error("Initialization Error:", error);
 }
