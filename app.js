@@ -1,14 +1,13 @@
 /**
- * Pomodoro Timer Pro - Orchestrated Version 3.5
- * Architecture: Web Worker Heartbeat + Wake Lock + Zustand State Engine
- * Security: XSS-Safe DOM Manipulation, Context-Aware Audio
+ * Pomodoro Timer Pro - Orchestrated Version 4.0 (Final)
+ * Pillars: Technical Immortality, Cognitive Flow, Deterministic Analytics
  */
 
 import { createStore } from 'https://esm.sh/zustand@4.5.2/vanilla';
 import { persist, createJSONStorage } from 'https://esm.sh/zustand@4.5.2/middleware';
 
-// --- 1. TECHNICAL IMMORTALITY: WEB WORKER SETUP ---
-// We use an inline blob to ensure the timer ticks even when the tab is backgrounded.
+// --- 1. TECHNICAL CORE: WORKER & HARDWARE ---
+
 const workerCode = `
     let timerId = null;
     self.onmessage = (e) => {
@@ -24,86 +23,51 @@ const workerCode = `
 const blob = new Blob([workerCode], { type: 'application/javascript' });
 const timerWorker = new Worker(URL.createObjectURL(blob));
 
-// --- 2. UTILITIES & HARDWARE INTERFACES ---
-
 let audioCtx = null;
 let wakeLock = null;
 
 const requestWakeLock = async () => {
     if ('wakeLock' in navigator) {
-        try {
-            wakeLock = await navigator.wakeLock.request('screen');
-        } catch (err) {
-            console.warn(`Wake Lock Error: ${err.message}`);
-        }
+        try { wakeLock = await navigator.wakeLock.request('screen'); } 
+        catch (err) { console.warn("Wake Lock blocked"); }
     }
 };
 
 const releaseWakeLock = () => {
-    if (wakeLock) {
-        wakeLock.release().then(() => { wakeLock = null; });
-    }
+    if (wakeLock) { wakeLock.release().then(() => wakeLock = null); }
 };
 
-const playNotificationSound = () => {
-    if (!audioCtx) return;
-    if (audioCtx.state === 'suspended') audioCtx.resume();
-    
-    const osc = audioCtx.createOscillator();
-    const gain = audioCtx.createGain();
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(880, audioCtx.currentTime); 
-    osc.frequency.exponentialRampToValueAtTime(440, audioCtx.currentTime + 0.5); 
-    gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.5);
-    osc.connect(gain);
-    gain.connect(audioCtx.destination);
-    osc.start();
-    osc.stop(audioCtx.currentTime + 0.5);
-};
-
-const triggerVisualNotification = (title, body) => {
-    if (Notification.permission === 'granted') {
-        new Notification(title, { 
-            body, 
-            icon: 'https://cdn-icons-png.flaticon.com/512/2553/2553391.png' 
-        });
-    }
-};
-
-const formatTime = (seconds) => {
-    const mins = Math.floor(Math.max(0, seconds) / 60);
-    const secs = Math.floor(Math.max(0, seconds) % 60);
-    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-};
-
-// --- 3. DETERMINISTIC STATE ENGINE ---
+// --- 2. THE ORCHESTRATION ENGINE (STATE) ---
 
 const timerStore = createStore(
     persist(
         (set, get) => ({
+            // Core State
             timeLeft: 1500,
             workDuration: 25,
             breakDuration: 5,
             isActive: false,
+            isBreathing: false,
             mode: 'work',
             sessionsCompleted: 0,
+            distractionCount: 0,
             expectedEndTime: null,
             tasks: [],
-            currentIntention: "", // Hook for Psychological Pillar
+            currentIntention: "",
+
+            // Actions: Psychological Priming
+            setIntention: (text) => set({ currentIntention: text }),
 
             startTimer: async () => {
-                if (get().isActive) return;
+                const state = get();
+                if (state.isActive || state.isBreathing) return;
 
-                // Initialize Hardware/API Contexts
+                // Hardware Init
                 if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
                 if (Notification.permission === 'default') Notification.requestPermission();
                 await requestWakeLock();
 
-                // Calculate precise end time to prevent drift
-                const now = Date.now();
-                const endTime = now + (get().timeLeft * 1000);
-                
+                const endTime = Date.now() + (state.timeLeft * 1000);
                 set({ isActive: true, expectedEndTime: endTime });
                 timerWorker.postMessage({ command: 'START' });
             },
@@ -112,15 +76,6 @@ const timerStore = createStore(
                 timerWorker.postMessage({ command: 'STOP' });
                 releaseWakeLock();
                 set({ isActive: false, expectedEndTime: null });
-            },
-
-            resetTimer: () => {
-                get().pauseTimer();
-                const { mode, workDuration, breakDuration } = get();
-                set({ 
-                    timeLeft: mode === 'work' ? workDuration * 60 : breakDuration * 60,
-                    isActive: false 
-                });
             },
 
             tick: () => {
@@ -133,55 +88,60 @@ const timerStore = createStore(
                 if (remaining >= 0) {
                     set({ timeLeft: remaining });
                 } else {
-                    // Session Completion Logic
-                    playNotificationSound();
+                    get().triggerTransition();
+                }
+            },
+
+            triggerTransition: () => {
+                const { mode, workDuration, breakDuration, sessionsCompleted } = get();
+                get().pauseTimer();
+                
+                // Play Sound & Notify
+                const audio = new Audio('https://actions.google.com/sounds/v1/alarms/beep_short.ogg');
+                audio.play().catch(() => {}); 
+
+                // Start Breathing Phase (Psychological Pillar)
+                set({ isBreathing: true });
+
+                setTimeout(() => {
                     const nextMode = mode === 'work' ? 'break' : 'work';
                     const nextDuration = nextMode === 'work' ? workDuration : breakDuration;
                     
-                    triggerVisualNotification(
-                        'Pomodoro Pro', 
-                        nextMode === 'break' ? 'Session complete! Take a breath.' : 'Break over! Let\'s focus.'
-                    );
-                    
-                    get().pauseTimer();
-                    
                     set({ 
-                        mode: nextMode, 
-                        timeLeft: nextDuration * 60, 
+                        isBreathing: false,
+                        mode: nextMode,
+                        timeLeft: nextDuration * 60,
                         sessionsCompleted: mode === 'work' ? sessionsCompleted + 1 : sessionsCompleted,
-                        isActive: false,
-                        expectedEndTime: null,
-                        currentIntention: "" // Clear intention for next session
+                        currentIntention: "" // Reset for next session
                     });
-                }
+                }, 15000); // 15 Seconds of Breathing
             },
+
+            // Data Optimization: Distraction Tracking
+            logDistraction: () => set(state => ({ distractionCount: state.distractionCount + 1 })),
 
             updateSettings: (work, breakTime) => {
                 const w = Math.max(1, Math.min(60, parseInt(work) || 25));
                 const b = Math.max(1, Math.min(30, parseInt(breakTime) || 5));
                 set({ workDuration: w, breakDuration: b });
-                if (!get().isActive) get().resetTimer();
+                if (!get().isActive) set({ timeLeft: get().mode === 'work' ? w * 60 : b * 60 });
             },
 
-            addTask: (text) => {
-                const newTask = { id: crypto.randomUUID(), text: text.trim(), completed: false };
-                if (newTask.text) set((state) => ({ tasks: [...state.tasks, newTask] }));
-            },
+            addTask: (text) => set(state => ({ 
+                tasks: [...state.tasks, { id: crypto.randomUUID(), text, completed: false }] 
+            })),
 
-            toggleTask: (id) => {
-                set((state) => ({
-                    tasks: state.tasks.map(t => t.id === id ? { ...t, completed: !t.completed } : t)
-                }));
-            },
+            toggleTask: (id) => set(state => ({
+                tasks: state.tasks.map(t => t.id === id ? { ...t, completed: !t.completed } : t)
+            })),
 
-            deleteTask: (id) => {
-                set((state) => ({ tasks: state.tasks.filter(t => t.id !== id) }));
-            },
+            deleteTask: (id) => set(state => ({ tasks: state.tasks.filter(t => t.id !== id) })),
 
             clearProgress: () => {
-                if (confirm("Reset all session and task data?")) {
-                    set({ sessionsCompleted: 0, tasks: [] });
-                    get().resetTimer();
+                if (confirm("Reset all data?")) {
+                    set({ sessionsCompleted: 0, distractionCount: 0, tasks: [] });
+                    const s = get();
+                    set({ timeLeft: s.mode === 'work' ? s.workDuration * 60 : s.breakDuration * 60 });
                 }
             }
         }),
@@ -193,14 +153,13 @@ const timerStore = createStore(
                 workDuration: state.workDuration,
                 breakDuration: state.breakDuration,
                 tasks: state.tasks,
-                timeLeft: state.timeLeft,
-                mode: state.mode
+                distractionCount: state.distractionCount
             }),
         }
     )
 );
 
-// --- 4. DOM REACTION LAYER ---
+// --- 3. DOM INTERFACE & REACTIVE BINDINGS ---
 
 const elements = {
     timeLeft: document.getElementById('time-left'),
@@ -209,80 +168,95 @@ const elements = {
     startBtn: document.getElementById('start-btn'),
     pauseBtn: document.getElementById('pause-btn'),
     resetBtn: document.getElementById('reset-btn'),
-    clearBtn: document.getElementById('clear-progress-btn'),
     workInput: document.getElementById('work-input'),
     breakInput: document.getElementById('break-input'),
+    taskList: document.getElementById('task-list'),
     taskForm: document.getElementById('task-form'),
     taskInput: document.getElementById('task-input'),
-    taskList: document.getElementById('task-list'),
-    body: document.body
+    body: document.body,
+    // Psychological Elements
+    intentionOverlay: document.getElementById('intention-overlay'),
+    intentionForm: document.getElementById('intention-form'),
+    intentionInput: document.getElementById('intention-input'),
+    intentionDisplay: document.getElementById('active-intention-display'),
+    intentionText: document.getElementById('current-intention-text'),
+    breathingOverlay: document.getElementById('breathing-overlay')
 };
 
-const renderTasks = (tasks) => {
-    const fragment = document.createDocumentFragment();
-    tasks.forEach(task => {
-        const li = document.createElement('li');
-        li.className = `task-item ${task.completed ? 'completed' : ''}`;
-        
-        const checkbox = document.createElement('input');
-        checkbox.type = 'checkbox';
-        checkbox.checked = task.completed;
-        checkbox.className = 'task-toggle';
-        checkbox.onclick = () => timerStore.getState().toggleTask(task.id);
+const formatTime = (s) => `${Math.floor(s/60).toString().padStart(2,'0')}:${(s%60).toString().padStart(2,'0')}`;
 
-        const span = document.createElement('span');
-        span.textContent = task.text;
-
-        const delBtn = document.createElement('button');
-        delBtn.innerHTML = '&times;';
-        delBtn.className = 'task-delete';
-        delBtn.onclick = () => timerStore.getState().deleteTask(task.id);
-
-        li.append(checkbox, span, delBtn);
-        fragment.appendChild(li);
-    });
-    elements.taskList.innerHTML = '';
-    elements.taskList.appendChild(fragment);
-};
-
-// Reactive Subscription: The "Single Source of Truth"
-let lastTasks = null;
+// Reactive UI Sync
 timerStore.subscribe((state) => {
-    const timeStr = formatTime(state.timeLeft);
-    elements.timeLeft.textContent = timeStr;
+    elements.timeLeft.textContent = formatTime(state.timeLeft);
     elements.currentPhase.textContent = state.mode === 'work' ? 'Work Session' : 'Break Time';
     elements.sessionCount.textContent = state.sessionsCompleted;
     
-    elements.startBtn.hidden = state.isActive;
-    elements.pauseBtn.hidden = !state.isActive;
+    // Toggle Overlays
+    elements.breathingOverlay.classList.toggle('hidden', !state.isBreathing);
     
-    if (!elements.body.classList.contains(`${state.mode}-mode`)) {
-        elements.body.classList.remove('work-mode', 'break-mode');
-        elements.body.classList.add(`${state.mode}-mode`);
+    // Intention Display
+    if (state.mode === 'work' && state.currentIntention && !state.isBreathing) {
+        elements.intentionDisplay.classList.remove('hidden');
+        elements.intentionText.textContent = state.currentIntention;
+    } else {
+        elements.intentionDisplay.classList.add('hidden');
     }
 
-    document.title = `${timeStr} - ${state.mode === 'work' ? 'Focus' : 'Rest'}`;
+    // Button States
+    elements.startBtn.hidden = state.isActive || state.isBreathing;
+    elements.pauseBtn.hidden = !state.isActive;
+    
+    // Theme
+    elements.body.className = `${state.mode}-mode`;
+    document.title = state.isBreathing ? "Breathe..." : `${formatTime(state.timeLeft)} - ${state.mode}`;
+});
 
-    if (state.tasks !== lastTasks) {
-        renderTasks(state.tasks);
-        lastTasks = state.tasks;
+// Task Rendering
+let lastTasks = [];
+timerStore.subscribe((state) => {
+    if (state.tasks === lastTasks) return;
+    lastTasks = state.tasks;
+    elements.taskList.innerHTML = '';
+    state.tasks.forEach(task => {
+        const li = document.createElement('li');
+        li.className = `task-item ${task.completed ? 'completed' : ''}`;
+        li.innerHTML = `
+            <input type="checkbox" ${task.completed ? 'checked' : ''} class="task-toggle">
+            <span>${task.text}</span>
+            <button class="task-delete">&times;</button>
+        `;
+        li.querySelector('.task-toggle').onclick = () => timerStore.getState().toggleTask(task.id);
+        li.querySelector('.task-delete').onclick = () => timerStore.getState().deleteTask(task.id);
+        elements.taskList.appendChild(li);
+    });
+});
+
+// --- 4. EVENT ORCHESTRATION ---
+
+// Start Logic with Intention Priming
+elements.startBtn.addEventListener('click', () => {
+    const state = timerStore.getState();
+    if (state.mode === 'work' && !state.currentIntention) {
+        elements.intentionOverlay.classList.remove('hidden');
+        elements.intentionInput.focus();
+    } else {
+        timerStore.getState().startTimer();
     }
 });
 
-// --- 5. EVENT ORCHESTRATION ---
+elements.intentionForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const text = elements.intentionInput.value.trim();
+    if (text) {
+        timerStore.getState().setIntention(text);
+        elements.intentionOverlay.classList.add('hidden');
+        timerStore.getState().startTimer();
+        elements.intentionInput.value = '';
+    }
+});
 
-timerWorker.onmessage = () => timerStore.getState().tick();
-
-elements.startBtn.addEventListener('click', () => timerStore.getState().startTimer());
 elements.pauseBtn.addEventListener('click', () => timerStore.getState().pauseTimer());
 elements.resetBtn.addEventListener('click', () => timerStore.getState().resetTimer());
-elements.clearBtn.addEventListener('click', () => timerStore.getState().clearProgress());
-
-const syncSettings = () => {
-    timerStore.getState().updateSettings(elements.workInput.value, elements.breakInput.value);
-};
-elements.workInput.addEventListener('input', syncSettings);
-elements.breakInput.addEventListener('input', syncSettings);
 
 elements.taskForm.addEventListener('submit', (e) => {
     e.preventDefault();
@@ -293,10 +267,16 @@ elements.taskForm.addEventListener('submit', (e) => {
     }
 });
 
-// Re-request Wake Lock on visibility change (OS safety)
-document.addEventListener('visibilitychange', async () => {
-    if (timerStore.getState().isActive && document.visibilityState === 'visible') {
-        await requestWakeLock();
+const syncSettings = () => timerStore.getState().updateSettings(elements.workInput.value, elements.breakInput.value);
+elements.workInput.addEventListener('input', syncSettings);
+elements.breakInput.addEventListener('input', syncSettings);
+
+timerWorker.onmessage = () => timerStore.getState().tick();
+
+// OS/Hardware Resilience
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && timerStore.getState().isActive) {
+        requestWakeLock();
     }
 });
 
@@ -304,4 +284,3 @@ document.addEventListener('visibilitychange', async () => {
 const init = timerStore.getState();
 elements.workInput.value = init.workDuration;
 elements.breakInput.value = init.breakDuration;
-renderTasks(init.tasks);
