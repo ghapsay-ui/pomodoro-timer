@@ -1,5 +1,5 @@
 /**
- * Pomodoro Timer Pro - Orchestrated Version 5.0 (Definitive)
+ * Pomodoro Timer Pro - Orchestrated Version 5.2 (Definitive)
  * Features: Glassmorphism, Neural Arc, Ocular Ergonomics, Analytics Dashboard
  */
 
@@ -43,6 +43,7 @@ body {
     padding: 20px;
 }
 
+/* Prevents scrolling when overlays are active */
 body.overlay-active {
     overflow: hidden;
 }
