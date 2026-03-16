@@ -1,14 +1,49 @@
 /**
- * Pomodoro Timer Pro - Optimized Orchestration
- * Fixes: Timer Drift, Audio Blocking, Hydration Logic
+ * Pomodoro Timer Pro - Orchestrated Version 3.5
+ * Architecture: Web Worker Heartbeat + Wake Lock + Zustand State Engine
+ * Security: XSS-Safe DOM Manipulation, Context-Aware Audio
  */
 
 import { createStore } from 'https://esm.sh/zustand@4.5.2/vanilla';
 import { persist, createJSONStorage } from 'https://esm.sh/zustand@4.5.2/middleware';
 
-// --- 1. ENHANCED UTILITIES ---
+// --- 1. TECHNICAL IMMORTALITY: WEB WORKER SETUP ---
+// We use an inline blob to ensure the timer ticks even when the tab is backgrounded.
+const workerCode = `
+    let timerId = null;
+    self.onmessage = (e) => {
+        if (e.data.command === 'START') {
+            if (timerId) clearInterval(timerId);
+            timerId = setInterval(() => self.postMessage('TICK'), 1000);
+        } else if (e.data.command === 'STOP') {
+            clearInterval(timerId);
+            timerId = null;
+        }
+    };
+`;
+const blob = new Blob([workerCode], { type: 'application/javascript' });
+const timerWorker = new Worker(URL.createObjectURL(blob));
 
-let audioCtx = null; // Global reference to be initialized on user gesture
+// --- 2. UTILITIES & HARDWARE INTERFACES ---
+
+let audioCtx = null;
+let wakeLock = null;
+
+const requestWakeLock = async () => {
+    if ('wakeLock' in navigator) {
+        try {
+            wakeLock = await navigator.wakeLock.request('screen');
+        } catch (err) {
+            console.warn(`Wake Lock Error: ${err.message}`);
+        }
+    }
+};
+
+const releaseWakeLock = () => {
+    if (wakeLock) {
+        wakeLock.release().then(() => { wakeLock = null; });
+    }
+};
 
 const playNotificationSound = () => {
     if (!audioCtx) return;
@@ -42,7 +77,7 @@ const formatTime = (seconds) => {
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
 };
 
-// --- 2. STATE ENGINE (DETERMINISTIC) ---
+// --- 3. DETERMINISTIC STATE ENGINE ---
 
 const timerStore = createStore(
     persist(
@@ -53,29 +88,29 @@ const timerStore = createStore(
             isActive: false,
             mode: 'work',
             sessionsCompleted: 0,
-            expectedEndTime: null, // Used for drift-free timing
+            expectedEndTime: null,
             tasks: [],
+            currentIntention: "", // Hook for Psychological Pillar
 
-            startTimer: () => {
+            startTimer: async () => {
                 if (get().isActive) return;
-                
-                // Initialize Audio on first start
+
+                // Initialize Hardware/API Contexts
                 if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
                 if (Notification.permission === 'default') Notification.requestPermission();
+                await requestWakeLock();
 
+                // Calculate precise end time to prevent drift
                 const now = Date.now();
                 const endTime = now + (get().timeLeft * 1000);
                 
                 set({ isActive: true, expectedEndTime: endTime });
-                
-                // Use a high-frequency tick for UI responsiveness, 
-                // but logic relies on the endTime delta.
-                const id = setInterval(() => get().tick(), 200); 
-                get().intervalId = id; 
+                timerWorker.postMessage({ command: 'START' });
             },
 
             pauseTimer: () => {
-                if (get().intervalId) clearInterval(get().intervalId);
+                timerWorker.postMessage({ command: 'STOP' });
+                releaseWakeLock();
                 set({ isActive: false, expectedEndTime: null });
             },
 
@@ -98,22 +133,26 @@ const timerStore = createStore(
                 if (remaining >= 0) {
                     set({ timeLeft: remaining });
                 } else {
-                    // Phase Transition
+                    // Session Completion Logic
                     playNotificationSound();
                     const nextMode = mode === 'work' ? 'break' : 'work';
                     const nextDuration = nextMode === 'work' ? workDuration : breakDuration;
                     
-                    triggerVisualNotification('Pomodoro', nextMode === 'break' ? 'Break time!' : 'Work time!');
+                    triggerVisualNotification(
+                        'Pomodoro Pro', 
+                        nextMode === 'break' ? 'Session complete! Take a breath.' : 'Break over! Let\'s focus.'
+                    );
+                    
+                    get().pauseTimer();
                     
                     set({ 
                         mode: nextMode, 
                         timeLeft: nextDuration * 60, 
                         sessionsCompleted: mode === 'work' ? sessionsCompleted + 1 : sessionsCompleted,
                         isActive: false,
-                        expectedEndTime: null
+                        expectedEndTime: null,
+                        currentIntention: "" // Clear intention for next session
                     });
-                    
-                    if (get().intervalId) clearInterval(get().intervalId);
                 }
             },
 
@@ -154,14 +193,14 @@ const timerStore = createStore(
                 workDuration: state.workDuration,
                 breakDuration: state.breakDuration,
                 tasks: state.tasks,
-                timeLeft: state.timeLeft, // Persist remaining time
+                timeLeft: state.timeLeft,
                 mode: state.mode
             }),
         }
     )
 );
 
-// --- 3. DOM CONTROLLER (REACTIVE) ---
+// --- 4. DOM REACTION LAYER ---
 
 const elements = {
     timeLeft: document.getElementById('time-left'),
@@ -206,7 +245,7 @@ const renderTasks = (tasks) => {
     elements.taskList.appendChild(fragment);
 };
 
-// Reactive Subscription
+// Reactive Subscription: The "Single Source of Truth"
 let lastTasks = null;
 timerStore.subscribe((state) => {
     const timeStr = formatTime(state.timeLeft);
@@ -214,17 +253,15 @@ timerStore.subscribe((state) => {
     elements.currentPhase.textContent = state.mode === 'work' ? 'Work Session' : 'Break Time';
     elements.sessionCount.textContent = state.sessionsCompleted;
     
-    // UI State Toggles
     elements.startBtn.hidden = state.isActive;
     elements.pauseBtn.hidden = !state.isActive;
     
-    // Theme Sync
     if (!elements.body.classList.contains(`${state.mode}-mode`)) {
         elements.body.classList.remove('work-mode', 'break-mode');
         elements.body.classList.add(`${state.mode}-mode`);
     }
 
-    document.title = `${timeStr} - ${state.mode === 'work' ? 'Work' : 'Break'}`;
+    document.title = `${timeStr} - ${state.mode === 'work' ? 'Focus' : 'Rest'}`;
 
     if (state.tasks !== lastTasks) {
         renderTasks(state.tasks);
@@ -232,7 +269,10 @@ timerStore.subscribe((state) => {
     }
 });
 
-// Event Listeners
+// --- 5. EVENT ORCHESTRATION ---
+
+timerWorker.onmessage = () => timerStore.getState().tick();
+
 elements.startBtn.addEventListener('click', () => timerStore.getState().startTimer());
 elements.pauseBtn.addEventListener('click', () => timerStore.getState().pauseTimer());
 elements.resetBtn.addEventListener('click', () => timerStore.getState().resetTimer());
@@ -253,7 +293,15 @@ elements.taskForm.addEventListener('submit', (e) => {
     }
 });
 
-// Initial Sync
-const initialState = timerStore.getState();
-elements.workInput.value = initialState.workDuration;
-elements.breakInput.value = initialState.breakDuration;
+// Re-request Wake Lock on visibility change (OS safety)
+document.addEventListener('visibilitychange', async () => {
+    if (timerStore.getState().isActive && document.visibilityState === 'visible') {
+        await requestWakeLock();
+    }
+});
+
+// Initial Hydration
+const init = timerStore.getState();
+elements.workInput.value = init.workDuration;
+elements.breakInput.value = init.breakDuration;
+renderTasks(init.tasks);
