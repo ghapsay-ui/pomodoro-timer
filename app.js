@@ -1,43 +1,48 @@
 /**
- * Pomodoro Timer Pro - app.js (Phase 2)
- * Features: Dynamic Durations, Task Management, Persistence, Alerts
+ * Pomodoro Timer Pro - Optimized Orchestration
+ * Fixes: Timer Drift, Audio Blocking, Hydration Logic
  */
 
 import { createStore } from 'https://esm.sh/zustand@4.5.2/vanilla';
 import { persist, createJSONStorage } from 'https://esm.sh/zustand@4.5.2/middleware';
 
-// --- 1. UTILITIES: ALERTS & FORMATTING ---
+// --- 1. ENHANCED UTILITIES ---
+
+let audioCtx = null; // Global reference to be initialized on user gesture
 
 const playNotificationSound = () => {
-    try {
-        const ctx = new (window.AudioContext || window.webkitAudioContext)();
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(880, ctx.currentTime); 
-        osc.frequency.exponentialRampToValueAtTime(440, ctx.currentTime + 0.5); 
-        gain.gain.setValueAtTime(0.1, ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.5);
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.start();
-        osc.stop(ctx.currentTime + 0.5);
-    } catch (e) { console.warn("Audio blocked:", e); }
+    if (!audioCtx) return;
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(880, audioCtx.currentTime); 
+    osc.frequency.exponentialRampToValueAtTime(440, audioCtx.currentTime + 0.5); 
+    gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.5);
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start();
+    osc.stop(audioCtx.currentTime + 0.5);
 };
 
 const triggerVisualNotification = (title, body) => {
     if (Notification.permission === 'granted') {
-        new Notification(title, { body, icon: 'https://cdn-icons-png.flaticon.com/512/2553/2553391.png' });
+        new Notification(title, { 
+            body, 
+            icon: 'https://cdn-icons-png.flaticon.com/512/2553/2553391.png' 
+        });
     }
 };
 
 const formatTime = (seconds) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
+    const mins = Math.floor(Math.max(0, seconds) / 60);
+    const secs = Math.floor(Math.max(0, seconds) % 60);
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
 };
 
-// --- 2. STATE ENGINE: ZUSTAND STORE ---
+// --- 2. STATE ENGINE (DETERMINISTIC) ---
 
 const timerStore = createStore(
     persist(
@@ -48,20 +53,30 @@ const timerStore = createStore(
             isActive: false,
             mode: 'work',
             sessionsCompleted: 0,
-            intervalId: null,
+            expectedEndTime: null, // Used for drift-free timing
             tasks: [],
 
             startTimer: () => {
                 if (get().isActive) return;
+                
+                // Initialize Audio on first start
+                if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
                 if (Notification.permission === 'default') Notification.requestPermission();
-                const id = setInterval(() => get().tick(), 1000);
-                set({ isActive: true, intervalId: id });
+
+                const now = Date.now();
+                const endTime = now + (get().timeLeft * 1000);
+                
+                set({ isActive: true, expectedEndTime: endTime });
+                
+                // Use a high-frequency tick for UI responsiveness, 
+                // but logic relies on the endTime delta.
+                const id = setInterval(() => get().tick(), 200); 
+                get().intervalId = id; 
             },
 
             pauseTimer: () => {
-                const { intervalId } = get();
-                if (intervalId) clearInterval(intervalId);
-                set({ isActive: false, intervalId: null });
+                if (get().intervalId) clearInterval(get().intervalId);
+                set({ isActive: false, expectedEndTime: null });
             },
 
             resetTimer: () => {
@@ -74,18 +89,31 @@ const timerStore = createStore(
             },
 
             tick: () => {
-                const { timeLeft, mode, sessionsCompleted, workDuration, breakDuration } = get();
-                if (timeLeft > 0) {
-                    set({ timeLeft: timeLeft - 1 });
+                const { expectedEndTime, mode, sessionsCompleted, workDuration, breakDuration } = get();
+                if (!expectedEndTime) return;
+
+                const now = Date.now();
+                const remaining = Math.round((expectedEndTime - now) / 1000);
+
+                if (remaining >= 0) {
+                    set({ timeLeft: remaining });
                 } else {
+                    // Phase Transition
                     playNotificationSound();
-                    triggerVisualNotification('Pomodoro', mode === 'work' ? 'Break time!' : 'Work time!');
-                    if (mode === 'work') {
-                        set({ mode: 'break', timeLeft: breakDuration * 60, sessionsCompleted: sessionsCompleted + 1 });
-                    } else {
-                        set({ mode: 'work', timeLeft: workDuration * 60 });
-                    }
-                    get().pauseTimer();
+                    const nextMode = mode === 'work' ? 'break' : 'work';
+                    const nextDuration = nextMode === 'work' ? workDuration : breakDuration;
+                    
+                    triggerVisualNotification('Pomodoro', nextMode === 'break' ? 'Break time!' : 'Work time!');
+                    
+                    set({ 
+                        mode: nextMode, 
+                        timeLeft: nextDuration * 60, 
+                        sessionsCompleted: mode === 'work' ? sessionsCompleted + 1 : sessionsCompleted,
+                        isActive: false,
+                        expectedEndTime: null
+                    });
+                    
+                    if (get().intervalId) clearInterval(get().intervalId);
                 }
             },
 
@@ -97,7 +125,7 @@ const timerStore = createStore(
             },
 
             addTask: (text) => {
-                const newTask = { id: Date.now(), text: text.trim(), completed: false };
+                const newTask = { id: crypto.randomUUID(), text: text.trim(), completed: false };
                 if (newTask.text) set((state) => ({ tasks: [...state.tasks, newTask] }));
             },
 
@@ -125,13 +153,15 @@ const timerStore = createStore(
                 sessionsCompleted: state.sessionsCompleted,
                 workDuration: state.workDuration,
                 breakDuration: state.breakDuration,
-                tasks: state.tasks
+                tasks: state.tasks,
+                timeLeft: state.timeLeft, // Persist remaining time
+                mode: state.mode
             }),
         }
     )
 );
 
-// --- 3. DOM CONTROLLER ---
+// --- 3. DOM CONTROLLER (REACTIVE) ---
 
 const elements = {
     timeLeft: document.getElementById('time-left'),
@@ -150,7 +180,7 @@ const elements = {
 };
 
 const renderTasks = (tasks) => {
-    elements.taskList.innerHTML = '';
+    const fragment = document.createDocumentFragment();
     tasks.forEach(task => {
         const li = document.createElement('li');
         li.className = `task-item ${task.completed ? 'completed' : ''}`;
@@ -158,32 +188,43 @@ const renderTasks = (tasks) => {
         const checkbox = document.createElement('input');
         checkbox.type = 'checkbox';
         checkbox.checked = task.completed;
-        checkbox.dataset.id = task.id;
         checkbox.className = 'task-toggle';
+        checkbox.onclick = () => timerStore.getState().toggleTask(task.id);
 
         const span = document.createElement('span');
         span.textContent = task.text;
 
         const delBtn = document.createElement('button');
-        delBtn.textContent = '×';
-        delBtn.dataset.id = task.id;
+        delBtn.innerHTML = '&times;';
         delBtn.className = 'task-delete';
+        delBtn.onclick = () => timerStore.getState().deleteTask(task.id);
 
         li.append(checkbox, span, delBtn);
-        elements.taskList.appendChild(li);
+        fragment.appendChild(li);
     });
+    elements.taskList.innerHTML = '';
+    elements.taskList.appendChild(fragment);
 };
 
 // Reactive Subscription
-let lastTasks = [];
+let lastTasks = null;
 timerStore.subscribe((state) => {
-    elements.timeLeft.textContent = formatTime(state.timeLeft);
+    const timeStr = formatTime(state.timeLeft);
+    elements.timeLeft.textContent = timeStr;
     elements.currentPhase.textContent = state.mode === 'work' ? 'Work Session' : 'Break Time';
     elements.sessionCount.textContent = state.sessionsCompleted;
+    
+    // UI State Toggles
     elements.startBtn.hidden = state.isActive;
     elements.pauseBtn.hidden = !state.isActive;
-    elements.body.className = state.mode === 'work' ? 'work-mode' : 'break-mode';
-    document.title = `${formatTime(state.timeLeft)} - ${state.mode === 'work' ? 'Work' : 'Break'}`;
+    
+    // Theme Sync
+    if (!elements.body.classList.contains(`${state.mode}-mode`)) {
+        elements.body.classList.remove('work-mode', 'break-mode');
+        elements.body.classList.add(`${state.mode}-mode`);
+    }
+
+    document.title = `${timeStr} - ${state.mode === 'work' ? 'Work' : 'Break'}`;
 
     if (state.tasks !== lastTasks) {
         renderTasks(state.tasks);
@@ -191,32 +232,28 @@ timerStore.subscribe((state) => {
     }
 });
 
-// Listeners
+// Event Listeners
 elements.startBtn.addEventListener('click', () => timerStore.getState().startTimer());
 elements.pauseBtn.addEventListener('click', () => timerStore.getState().pauseTimer());
 elements.resetBtn.addEventListener('click', () => timerStore.getState().resetTimer());
 elements.clearBtn.addEventListener('click', () => timerStore.getState().clearProgress());
 
-const syncSettings = () => timerStore.getState().updateSettings(elements.workInput.value, elements.breakInput.value);
-elements.workInput.addEventListener('change', syncSettings);
-elements.breakInput.addEventListener('change', syncSettings);
+const syncSettings = () => {
+    timerStore.getState().updateSettings(elements.workInput.value, elements.breakInput.value);
+};
+elements.workInput.addEventListener('input', syncSettings);
+elements.breakInput.addEventListener('input', syncSettings);
 
 elements.taskForm.addEventListener('submit', (e) => {
     e.preventDefault();
-    timerStore.getState().addTask(elements.taskInput.value);
-    elements.taskInput.value = '';
+    const val = elements.taskInput.value.trim();
+    if (val) {
+        timerStore.getState().addTask(val);
+        elements.taskInput.value = '';
+    }
 });
 
-elements.taskList.addEventListener('click', (e) => {
-    const id = parseInt(e.target.dataset.id);
-    if (!id) return;
-    if (e.target.classList.contains('task-toggle')) timerStore.getState().toggleTask(id);
-    if (e.target.classList.contains('task-delete')) timerStore.getState().deleteTask(id);
-});
-
-// Init
-const init = timerStore.getState();
-elements.workInput.value = init.workDuration;
-elements.breakInput.value = init.breakDuration;
-elements.timeLeft.textContent = formatTime(init.timeLeft);
-renderTasks(init.tasks);
+// Initial Sync
+const initialState = timerStore.getState();
+elements.workInput.value = initialState.workDuration;
+elements.breakInput.value = initialState.breakDuration;
